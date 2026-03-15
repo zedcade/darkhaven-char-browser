@@ -391,7 +391,7 @@ document.addEventListener('DOMContentLoaded', () => {
     'Legendary Boots01':  'l_boots01_hushpaws.webp',
     'Legendary Boots02':  'l_boots02_twin_hurricanes.webp',
     'Legendary Boots04':  'l_boots04_voidwalkers.webp',
-    'Legendary Chest01':  'lchest01_nights_embrace.webp',
+    'Legendary Chest01':  'l_chest01_nights_embrace.webp',
     'Legendary Chest02':  'l_chest02_johanns_mystic_dreamcoat.webp',
     'Legendary Chest07':  'l_chest07_bloody_bones.webp',
     'Legendary Dagger01': 'l_dagger01_grimalkin.webp',
