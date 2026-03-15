@@ -1,6 +1,14 @@
 # Darkhaven (Demo) Character Browser
 
-An unofficial fan-made save file inspector for [Darkhaven](https://moonbeastgame.com). Point it at your save folder and browse all your characters — stats, equipment, stash, skills, kill log — without launching the game.
+An unofficial fan-made save file inspector for [Darkhaven](https://moonbeastgame.com).
+
+## How to use:
+1. Download the files and put them in a folder of your choosing.
+2. Open `index.html` in a supported Chromium-based browser (Chrome, Edge, Brave, Opera).
+3. Click the "Scan Save Folder Button" and point it at your Save folder.
+4. Wait for the files to be loaded and scanned. (Limit Scan to 20 is faster)
+5. Browse all your characters — stats, equipment, stash, skills, kill log — without launching the game.
+6. Enjoy!
 
 > **Unofficial fan tool** — not affiliated with or endorsed by Moon Beast Productions.
 
@@ -24,6 +32,8 @@ An unofficial fan-made save file inspector for [Darkhaven](https://moonbeastgame
 - Grid view: 15×16 stash grid with accurate item sizes and positions, item art, rarity borders
 - List view: sorted/filterable item list with thumbnails
 - Core/Heart cells coloured by rarity (Common, Elite, Champion, Unique)
+- Item socket support, including socketed items
+- Favourite item tag support
 - Full item tooltips on hover
 
 **Skills**
