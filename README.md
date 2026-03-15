@@ -2,7 +2,7 @@
 
 An unofficial fan-made save file inspector for [Darkhaven](https://moonbeastgame.com).
 
-![Character Panel](img/screenshot_character_panel.png)
+![Character Panel](img/screenshots/character_panel.png)
 
 
 ## How to use
@@ -38,7 +38,7 @@ No installation, no server, no internet connection required. Everything runs loc
 
 **Stash**
 
-![Stash Grid View](img/screenshot_stash_gridview.png)
+![Stash Grid View](img/screenshots/stash_gridview.png)
 - Grid view: 15×16 stash grid with accurate item sizes and positions, item art, rarity borders
 - List view: sorted/filterable item list with thumbnails
 - Core/Heart cells coloured by rarity (Common, Elite, Champion, Unique)
@@ -47,24 +47,24 @@ No installation, no server, no internet connection required. Everything runs loc
 - Full item tooltips on hover
 
 **Skills**
-![Skills Panel](img/screenshot_skills.png)
+![Skills Panel](img/screenshots/skills.png)
 - All three skill branches with current levels, tome bonuses, and global skill bonuses from rings
 - Skill upgrade cards showing unlocked options
 - Tooltips with descriptions and upgrade effects
 - Panel can be collapsed/expanded, state saved between sessions
 
 **Tattoos (Rune Garments)**
-![Tattoos Panel](img/screenshot_tattoos.png)
+![Tattoos Panel](img/screenshots/tattoos.png)
 - All rune garment slots with equipped runes and their socket effects
 - Panel can be collapsed/expanded, state saved between sessions
 
 **Kill Log**
-![Kill Log Panel](img/screenshot_kill_log.png)
+![Kill Log Panel](img/screenshots/kill_log.png)
 - Top killed monsters with counts, sortable by kills, Rarity, and Monsters
 - Panel can be collapsed/expanded, state saved between sessions
 
 **Legendary Catalogue**
-![Legendary Catalogue Panel](img/screenshot_legendaries.png)
+![Legendary Catalogue Panel](img/screenshots/legendaries.png)
 - Summary panel listing all legendary items found across the loaded saves
 - Panel can be collapsed/expanded, state saved between sessions
 
