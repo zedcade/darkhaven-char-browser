@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Darkhaven Character Browser</title>
+    <link rel="icon" type="image/svg+xml" href="img/favicon.svg">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+    <link rel="stylesheet" href="app.css">
+</head>
+<body>
+<!-- ── SVG symbol library — define once, use everywhere via <use href="#id"> ── -->
+<!-- Note: only icons using currentColor work reliably as symbols. Gradient-fill icons  -->
+<!-- (bookmark) are emitted as self-contained inline SVGs directly from app.js.         -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <!-- Grid view toggle icon (36×36 viewBox) -->
+  <symbol id="icon-grid" viewBox="0 0 36 36">
+    <path d="M14,4H6A2,2,0,0,0,4,6v8a2,2,0,0,0,2,2h8a2,2,0,0,0,2-2V6A2,2,0,0,0,14,4ZM6,14V6h8v8Z"/>
+    <path d="M30,4H22a2,2,0,0,0-2,2v8a2,2,0,0,0,2,2h8a2,2,0,0,0,2-2V6A2,2,0,0,0,30,4ZM22,14V6h8v8Z"/>
+    <path d="M14,20H6a2,2,0,0,0-2,2v8a2,2,0,0,0,2,2h8a2,2,0,0,0,2-2V22A2,2,0,0,0,14,20ZM6,30V22h8v8Z"/>
+    <path d="M30,20H22a2,2,0,0,0-2,2v8a2,2,0,0,0,2,2h8a2,2,0,0,0,2-2V22A2,2,0,0,0,30,20ZM22,30V22h8v8Z"/>
+  </symbol>
+  <!-- List view toggle icon (52×52 viewBox) -->
+  <symbol id="icon-list" viewBox="0 0 52 52">
+    <path d="M50,15.52H2a2,2,0,0,1-2-2V2A2,2,0,0,1,2,0H50a2,2,0,0,1,2,2V13.52A2,2,0,0,1,50,15.52Zm-46-4H48V4H4Z"/>
+    <path d="M50,33.76H2a2,2,0,0,1-2-2V20.24a2,2,0,0,1,2-2H50a2,2,0,0,1,2,2V31.76A2,2,0,0,1,50,33.76Zm-46-4H48V22.24H4Z"/>
+    <path d="M50,52H2a2,2,0,0,1-2-2V38.48a2,2,0,0,1,2-2H50a2,2,0,0,1,2,2V50A2,2,0,0,1,50,52ZM4,48H48V40.48H4Z"/>
+  </symbol>
+  <!-- GitHub logo (24×24 viewBox) -->
+  <symbol id="icon-github" viewBox="0 0 24 24">
+    <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
+  </symbol>
+</svg>
+
+
+<div class="layout">
+    <div class="sidebar">
+        <div class="file-header">
+            <img src="img/darkhaven.webp" alt="Darkhaven" class="dh-sidebar-logo">
+            <div class="dh-sidebar-title">Character Browser</div>
+            <button class="btn" id="open-folder-btn"><span class="btn-label">Scan Save Folder</span></button>
+
+            <div class="dh-folder-hint">
+              <span>📁 %APPDATA%\LocalLow\MoonBeast Production\<br>Darkhaven Demo\Save</span>
+              <button id="reset-folder-btn" class="dh-reset-btn">Reset</button>
+            </div>
+            <div class="dh-toggle-wrap">
+              <label class="dh-toggle" for="limit-toggle">
+                <input type="checkbox" id="limit-toggle" checked>
+                <span class="dh-toggle-slider"></span>
+              </label>
+              <label for="limit-toggle" class="dh-toggle-label">Last</label>
+              <input type="number" id="limit-count" min="1" max="50" value="20" class="limit-count-input">
+              <label for="limit-count" class="dh-toggle-label">saves / character</label>
+            </div>
+
+        </div>
+        <ul id="file-list">
+            <li class="dh-filelist-empty">
+                No files loaded.<br>Select your Darkhaven Save folder.
+            </li>
+        </ul>
+        <div class="sidebar-footer">
+          <a href="https://havenforge.gg" target="_blank" rel="noopener" class="sidebar-footer-link">
+            <span class="sidebar-footer-link-main">⚒ Visit <strong>Havenforge.gg</strong></span>
+            <span class="sidebar-footer-link-sub">Community companion site for Darkhaven</span>
+          </a>
+        </div>
+    </div>
+
+    <!-- Character detail view -->
+    <div class="main-content" id="detail-view">
+        <!-- identity/name rendered by app.js into stats-container -->
+        <span id="char-name" class="dh-hidden"></span>
+        <span id="char-level" class="dh-hidden"></span>
+        <span id="char-class" class="dh-hidden"></span>
+
+        <div id="stats-container"></div>
+        <div id="equip-container"></div>
+
+        <!-- In-page footer — pushed to bottom of scroll area -->
+        <footer id="page-footer" class="dh-hidden">
+          <span>Game content © Moon Beast Productions. "Darkhaven Character Browser" is not affiliated with or endorsed by Moon Beast Productions.</span>
+          <span class="dh-footer-links">
+            <span>Built with Claude AI ·</span>
+            <a href="https://github.com/zedcade/darkhaven-char-browser/blob/main/NOTICE.md" target="_blank" rel="noopener" class="dh-footer-link">Notice</a>
+            <span>·</span>
+            <a href="https://github.com/zedcade/darkhaven-char-browser" target="_blank" rel="noopener" class="dh-footer-link-gh">
+              <svg width="14" height="14" fill="currentColor" class="dh-footer-svg"><use href="#icon-github"/></svg>
+              GitHub
+            </a>
+          </span>
+        </footer>
+    </div>
+</div>
+
+<script src="maxguids.js"></script>
+<script src="maxparser.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
