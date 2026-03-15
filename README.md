@@ -2,13 +2,21 @@
 
 An unofficial fan-made save file inspector for [Darkhaven](https://moonbeastgame.com).
 
-## How to use:
-1. Download the files and put them in a folder of your choosing.
-2. Open `index.html` in a supported Chromium-based browser (Chrome, Edge, Brave, Opera).
-3. Click the "Scan Save Folder Button" and point it at your Save folder.
-4. Wait for the files to be loaded and scanned. (Limit Scan to 20 is faster)
-5. Browse all your characters — stats, equipment, stash, skills, kill log — without launching the game.
-6. Enjoy!
+![Character Panel](img/screenshot_character_panel.png)
+
+
+## How to use
+
+1. Open `index.html` directly in **Chrome, Edge, Opera or Brave** (requires the [File System Access API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_Access_API) — Firefox is not supported)
+2. Click **Open Save Folder** and select your Darkhaven save directory
+3. Your characters load automatically — click any character card to view details
+
+Your save folder is typically at:
+```
+%APPDATA%\LocalLow\MoonBeast Production\Darkhaven Demo\Save
+```
+
+No installation, no server, no internet connection required. Everything runs locally in the browser.
 
 > **Unofficial fan tool** — not affiliated with or endorsed by Moon Beast Productions.
 
@@ -29,6 +37,7 @@ An unofficial fan-made save file inspector for [Darkhaven](https://moonbeastgame
 - Hover any item for a full tooltip — affixes, sockets, requirements, legendary text
 
 **Stash**
+![Stash Grid View](img/screenshot_stash_gridview.png)
 - Grid view: 15×16 stash grid with accurate item sizes and positions, item art, rarity borders
 - List view: sorted/filterable item list with thumbnails
 - Core/Heart cells coloured by rarity (Common, Elite, Champion, Unique)
@@ -37,18 +46,26 @@ An unofficial fan-made save file inspector for [Darkhaven](https://moonbeastgame
 - Full item tooltips on hover
 
 **Skills**
+![Skills Panel](img/screenshot_skills.png)
 - All three skill branches with current levels, tome bonuses, and global skill bonuses from rings
 - Skill upgrade cards showing unlocked options
 - Tooltips with descriptions and upgrade effects
+- Panel can be collapsed/expanded, state saved between sessions
 
 **Tattoos (Rune Garments)**
+![Tattoos Panel](img/screenshot_tattoos.png)
 - All rune garment slots with equipped runes and their socket effects
+- Panel can be collapsed/expanded, state saved between sessions
 
 **Kill Log**
-- Top killed monsters with counts, sortable by kills
+![Kill Log Panel](img/screenshot_kill_log.png)
+- Top killed monsters with counts, sortable by kills, Rarity, and Monsters
+- Panel can be collapsed/expanded, state saved between sessions
 
 **Legendary Catalogue**
+![Legendary Catalogue Panel](img/screenshot_legendaries.png)
 - Summary panel listing all legendary items found across the loaded saves
+- Panel can be collapsed/expanded, state saved between sessions
 
 **Multi-save support**
 - Loads all `.max` save files from a folder (and subfolders) at once
@@ -59,52 +76,39 @@ Tip: Use the [HavenForge](https://havenforge.gg) app to manage multiple Single P
 
 ---
 
-## How to use
-
-1. Open `index.html` directly in **Chrome or Edge** (requires the [File System Access API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_Access_API) — Firefox is not supported)
-2. Click **Open Save Folder** and select your Darkhaven save directory
-3. Your characters load automatically — click any character card to view details
-
-Your save folder is typically at:
-```
-%APPDATA%\LocalLow\MoonBeast Production\Darkhaven Demo\Save
-```
-
-No installation, no server, no internet connection required. Everything runs locally in the browser.
-
----
-
 ## Files
 
-| File | Purpose |
-|------|---------|
-| `index.html` | App shell and all CSS |
-| `app.js` | UI rendering, tooltip system, stash grid |
-| `app.css` | main style defnitions for page appeareance |
-| `maxparser.js` | `.max` save file parser — decompression, stat extraction, item resolution |
-| `maxguids.js` | DH_GUIDS container for all known guids from the .max save files (Demo only) |
-| `skills.md`| details the skills and skill ugrade information, will need to be updated as the game advances
-| `darkhaven_save_format.md` | analysis of the .max save format and its GUIDs (Demo version)
+| File | Purpose | Required |
+|------|---------|----------|
+| `index.html` | App shell and layout | Yes |
+| `app.js` | UI rendering, tooltip system, stash grid | Yes |
+| `app.css` | Main style definitions for page appearance | Yes |
+| `maxparser.js` | `.max` save file parser — decompression, stat extraction, item resolution | Yes |
+| `maxguids.js` | DH_GUIDS container for all known guids from the .max save files (Demo only) | Yes |
+| `skills.md`| Details the skills and skill upgrade information, will need to be updated as the game advances. Not needed for the tool to run, documentation only. | No |
+| `darkhaven_save_format.md` | Analysis of the .max save format and its GUIDs (Demo version). Not needed for the tool to run, documentation only. | No |
 
 ## Folder structure
-| Root | Purprose |
-|------|---------|
-- img
-    - cores | heart images: core_{mob_rarity_{element}_heart.png}
-    - dyes | dye images: {name}_dye.png
-    - gems | gem images: gem_{gem_type}_{rarity_number 01-03}.png (Demo ends at Dulled = 03)
-    - items | item images: {a/l/j/s/w}_{item_name}.png (.webp if {l})
-    - runes | rune images: rune{rarity_nr 01-05}_{rune_name}.png
-    - skills | skill and skill upgrade images: skill_{option}_{name}.png
-    - tomes | tome images: tome_of_{name}.png (all {skill} tomes have the same image in the demo) 
+| Folder | Contents | File pattern |
+|--------|----------|--------------|
+| `img/cores` | Heart images | `core_{rarity}_{element}_heart.png` |
+| `img/dyes` | Dye images | `{name}_dye.png` |
+| `img/gems` | Gem images | `gem_{type}_{nr}.png` — `01` Cracked · `02` Flawed · `03` Dull |
+| `img/items` | Item images | `{a/l/j/s/w}_{name}.png` — legendary items use `.webp` |
+| `img/runes` | Rune images | `rune{nr}_{name}.png` — `01`–`05` |
+| `img/skills` | Skill & upgrade images | `skill_{option}_{name}.png` |
+| `img/tomes` | Tome images | `tome_of_{name}.png` |
 
-Note: If you notice any missing images for items, you can easily add them yourself in the e.g. "img/items/" folder, following the naming conventions (a_= armor, j_=jewelry, s=shield, w_=weapon, etc.) for each item category (see file names in folder). Once they are placed in the appropriate subfolder, the page will load them, provided that the filenames follow the same syntax.
+
+> **Adding or replacing images:** Place images in the appropriate `img/` subfolder following the naming convention, e.g. for `items`
+> (`a_` = armor, `j_` = jewelry, `s_` = shield, `w_` = weapon, `l_` = legendary `.webp`).
+> The app will load them automatically on the next scan.
 
 ---
 
 ## Limitations
 
-- **Chrome / Edge only** — the File System Access API used to read your save folder is not available in Firefox
+- **Chromium-based browsers only** — the File System Access API is not supported in Firefox or Safari
 - Save format is reverse-engineered and may break after game updates
 - Some item names and stats may be missing or approximate for newer content
 
