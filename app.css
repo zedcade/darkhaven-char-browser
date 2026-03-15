@@ -833,6 +833,6 @@
   .dh-footer-link   { color:#555; text-decoration:none; transition:color .15s; }
   .dh-footer-link-gh { display:inline-flex; align-items:center; gap:4px; color:#555; text-decoration:none; transition:color .15s; }
   .dh-footer-svg    { flex-shrink:0; }
-  .dh-footer-link:hover, .dh-footer-link-gh:hover { color:#888; }
+  .dh-footer-link:hover, .dh-footer-link-gh:hover { color:#a78bfa; }
   .dh-sidebar-logo    { width:100%; max-width:220px; display:block; margin:auto; }
   .dh-filelist-empty  { padding:1.5rem; color:var(--text-muted); font-size:0.9rem; }
