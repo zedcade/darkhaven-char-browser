@@ -37,6 +37,7 @@ No installation, no server, no internet connection required. Everything runs loc
 - Hover any item for a full tooltip — affixes, sockets, requirements, legendary text
 
 **Stash**
+
 ![Stash Grid View](img/screenshot_stash_gridview.png)
 - Grid view: 15×16 stash grid with accurate item sizes and positions, item art, rarity borders
 - List view: sorted/filterable item list with thumbnails
