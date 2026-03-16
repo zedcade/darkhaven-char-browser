@@ -208,8 +208,31 @@ document.addEventListener('DOMContentLoaded', () => {
         // Store folder name for display
         openFolderBtn.title = '';
       }
-    } catch(e) { console.warn('[restore folder]', e); }
+    } catch(e) {
+        console.warn('[restore folder]', e);
+
+        // Folder no longer exists or handle is invalid – clear saved handle
+        if (e.name === "NotFoundError" || e.code === DOMException.NOT_FOUND_ERR) {
+          try {
+            await idbDel(IDB_KEY);
+          } catch (_) {}
+
+          _activeFolderHandle = null;
+          loadedFiles = [];
+          charCache = {};
+
+          // Reset scan button label and state
+          openFolderBtn.innerHTML = `<span class="btn-label">Scan Save Folder</span>`;
+          openFolderBtn.classList.remove("btn--rescan-pending");
+          openFolderBtn.disabled = false;
+
+          // Reset file list
+          fileListEl.innerHTML =
+            `<li class="file-list-empty">No files loaded.<br>Select your Darkhaven Save folder.</li>`;
+        }
+      }
   })();
+
   const detailView    = document.getElementById('detail-view');
   const elName        = document.getElementById('char-name');
   const elLevel       = document.getElementById('char-level');
@@ -2225,7 +2248,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 icon: 'img/skills/skill_glyph_lunge.png',
                 dmg:'—', cost:'—', scaling:'150% weapon damage', tag:'Basic Attack · Evocation · Focusing · Melee',
                 requires:'Weapon',
-                desc: 'Lunges at a nearby target dealing 150% weapon damage and a 14% (+4.62%) chance of generating a random Glyph. Three glyphs form a Spell — trigger Spells with Evocation skills.',
+                desc: 'Lunges at a nearby target dealing 150% weapon damage and a 14% chance of generating a random Glyph. Three glyphs form a Spell — trigger Spells with Evocation skills.',
                 upgrades: [
                   { name:'Reprise', max:3, levels:['40% chance an evoked Spell remains to be used again','60% chance an evoked Spell remains to be used again','80% chance an evoked Spell remains to be used again'] },
                 ],
@@ -2264,7 +2287,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 dmg:'Shadow', cost:'18 mana', scaling:'Magic', tag:'Teleport · Invulnerability · Shadow',
                 desc: 'Teleport to location where enemies within 2 meters are knocked back and Cursed. The curse lowers their defenses and returns health to the Witch when killed.',
                 upgrades: [
-                  { name:'Cypher',  max:3, requires:'Evocation', levels:['20% (+6.6%) chance of a glyph on cursed kills','26.6% (+6.6%) chance of a glyph on cursed kills','33.2% (+6.6%) chance of a glyph on cursed kills'] },
+                  { name:'Cypher',  max:3, requires:'Evocation', levels:['20% chance of a glyph on cursed kills','33% chance of a glyph on cursed kills','40% chance of a glyph on cursed kills'] },
                   { name:'Expanse', max:2, levels:['Extend the area of effect to 5 meters','Extend the area of effect to 8 meters'] },
                   { name:'Scourge', proto:'ce04da600ddc71d45aa161b1619b08e6', max:3, levels:['1× Scourge lasting 5 seconds — each stack lowers target\'s resistances','2× Scourge lasting 7 seconds — each stack lowers target\'s resistances','3× Scourge lasting 10 seconds — each stack lowers target\'s resistances'] },
                 ],

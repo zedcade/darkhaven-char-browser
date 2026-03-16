@@ -393,15 +393,15 @@
   .dh-panel-stats {
     display:flex; flex-direction:column;
     background:rgba(255,255,255,.025); border:1px solid rgba(255,255,255,.08);
-    border-radius:8px; overflow-y:auto; align-self:stretch; flex:1; min-width:128px;
+    border-radius:8px; overflow-y:auto; align-self:stretch; flex:1; min-width:134px;
   }
   .dh-group-label {
     padding:3px 10px; font-size:.55rem; font-weight:700; letter-spacing:.09em; text-transform:uppercase;
     color:rgba(255,255,255,.48); background:rgba(0,0,0,.25); border-bottom:1px solid rgba(255,255,255,.05);
   }
   .dh-stat-row { display:flex; align-items:center; justify-content:space-between; padding:4px 10px; border-bottom:1px solid rgba(255,255,255,.04); }
-  .dh-stat-label { font-size:.7rem; color:#888; }
-  .dh-stat-val   { font-size:.80rem; font-weight:700; min-width:32px; text-align:right; }
+  .dh-stat-label { font-size:.7rem; color:#888; white-space: nowrap;}
+  .dh-stat-val   { font-size:.78rem; font-weight:700; min-width:32px; text-align:right; }
   .dh-sep { height:5px; border-bottom:1px solid rgba(255,255,255,.05); flex-shrink:0; }
   .dh-res-bar-wrap   { padding:1px 10px 2px; }
   .dh-res-bar-labels { display:flex; align-items:center; justify-content:space-between; margin-bottom:1px; }
