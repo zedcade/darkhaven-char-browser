@@ -26,7 +26,8 @@ document.addEventListener('DOMContentLoaded', () => {
     skills:    'dh_collapsed_skills',
     tattoos:   'dh_collapsed_tattoos',
     kill:      'dh_collapsed_kill',
-    legendary: 'dh_collapsed_legendary',
+    legendary:     'dh_collapsed_legendary',
+    achievements:   'dh_collapsed_achievements',
     stashView: 'dh_stash_view',
   };
   function getPanelCollapsed(key) { return localStorage.getItem(LS_COLLAPSED[key]) === '1'; }
@@ -176,6 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
     openFolderBtn.classList.remove('btn--rescan-pending');
     openFolderBtn.disabled = false;
     fileListEl.innerHTML = '<li class="file-list-empty">No files loaded.<br>Select your Darkhaven Save folder.</li>';
+    setFolderPathDisplay(true);
     localStorage.setItem('dh_limitEnabled', '1');
     localStorage.setItem('dh_limitCount', '20');
     if (limitToggle)  { limitToggle.checked = true; limitEnabled = true; }
@@ -183,6 +185,80 @@ document.addEventListener('DOMContentLoaded', () => {
     const dv = document.getElementById('detail-view');
     if (dv) dv.classList.remove('active');
   };
+
+  // ── Folder path display ───────────────────────────────────────────────────
+  const DEFAULT_SAVE_PATH = '%APPDATA%\\LocalLow\\MoonBeast Production\\Darkhaven Demo\\Save';
+  const LS_FOLDER_PATH    = 'dh_folderPath';
+  const _folderHintSpan   = document.querySelector('.dh-folder-hint > span');
+
+  /**
+   * Update the folder-hint text below the scan button.
+   * Reads stored path from localStorage; falls back to default.
+   * Pass clearStored=true to revert to default and clear localStorage.
+   */
+  function setFolderPathDisplay(clearStored) {
+    if (!_folderHintSpan) return;
+    if (clearStored) {
+      localStorage.removeItem(LS_FOLDER_PATH);
+      _folderHintSpan.textContent = '\uD83D\uDCC1 ' + DEFAULT_SAVE_PATH;
+      _folderHintSpan.removeAttribute('title');
+    } else {
+      const stored = localStorage.getItem(LS_FOLDER_PATH);
+      if (stored) {
+        _folderHintSpan.textContent = '\uD83D\uDCC1 ' + stored;
+        _folderHintSpan.title = DEFAULT_SAVE_PATH;
+      } else {
+        _folderHintSpan.textContent = '\uD83D\uDCC1 ' + DEFAULT_SAVE_PATH;
+        _folderHintSpan.removeAttribute('title');
+      }
+    }
+  }
+
+  /**
+   * Show a one-time inline path confirm prompt below the scan button.
+   * Pre-fills with DEFAULT_SAVE_PATH. On confirm, stores in localStorage
+   * and updates the hint. Skipped if a path is already stored.
+   */
+  function promptFolderPath() {
+    if (localStorage.getItem(LS_FOLDER_PATH)) {
+      setFolderPathDisplay(false);
+      return;
+    }
+    const _folderHint = document.querySelector('.dh-folder-hint');
+    if (!_folderHint) { setFolderPathDisplay(false); return; }
+
+    // Remove any existing prompt
+    const _existing = document.getElementById('dh-path-prompt');
+    if (_existing) _existing.remove();
+
+    const _prompt = document.createElement('div');
+    _prompt.id = 'dh-path-prompt';
+    _prompt.className = 'dh-path-prompt';
+    _prompt.innerHTML =
+      '<div class="dh-path-prompt-label">Confirm your Save folder path:</div>' +
+      '<div class="dh-path-prompt-row">' +
+        '<input type="text" class="dh-path-prompt-input" id="dh-path-input" spellcheck="false">' +
+        '<button class="dh-path-prompt-ok" id="dh-path-ok">✓</button>' +
+      '</div>';
+    _folderHint.insertAdjacentElement('afterend', _prompt);
+
+    const _input = document.getElementById('dh-path-input');
+    const _ok    = document.getElementById('dh-path-ok');
+    _input.value = DEFAULT_SAVE_PATH;
+    _input.select();
+
+    const _confirm = () => {
+      const val = _input.value.trim();
+      if (val) {
+        localStorage.setItem(LS_FOLDER_PATH, val);
+        setFolderPathDisplay(false);
+      }
+      _prompt.remove();
+    };
+
+    _ok.addEventListener('click', _confirm);
+    _input.addEventListener('keydown', e => { if (e.key === 'Enter') _confirm(); });
+  }
 
   // ── On load: try to restore the last folder handle ────────────────────────
   (async function tryRestoreFolder() {
@@ -205,31 +281,29 @@ document.addEventListener('DOMContentLoaded', () => {
         _activeFolderHandle = handle;
         const folderName = handle.name || 'saved folder';
         openFolderBtn.innerHTML = '<span class="btn-label">🔓 Re-grant Access: ' + folderName + '</span>';
-        // Store folder name for display
-        openFolderBtn.title = '';
+        setFolderPathDisplay(false);  // show stored path or default
       }
     } catch(e) {
         console.warn('[restore folder]', e);
 
-        // Folder no longer exists or handle is invalid – clear saved handle
-        if (e.name === "NotFoundError" || e.code === DOMException.NOT_FOUND_ERR) {
-          try {
-            await idbDel(IDB_KEY);
-          } catch (_) {}
+        // Folder no longer exists, handle is invalid, or permission was revoked –
+        // treat any error here as unrecoverable and clear the saved handle.
+        try { await idbDel(IDB_KEY); } catch (_) {}
 
-          _activeFolderHandle = null;
-          loadedFiles = [];
-          charCache = {};
+        _activeFolderHandle = null;
+        loadedFiles = [];
+        charCache = {};
 
-          // Reset scan button label and state
-          openFolderBtn.innerHTML = `<span class="btn-label">Scan Save Folder</span>`;
-          openFolderBtn.classList.remove("btn--rescan-pending");
-          openFolderBtn.disabled = false;
+        setFolderPathDisplay(true);  // clear stored path, revert to default
 
-          // Reset file list
-          fileListEl.innerHTML =
-            `<li class="file-list-empty">No files loaded.<br>Select your Darkhaven Save folder.</li>`;
-        }
+        // Reset scan button label and state
+        openFolderBtn.innerHTML = `<span class="btn-label">Scan Save Folder</span>`;
+        openFolderBtn.classList.remove("btn--rescan-pending");
+        openFolderBtn.disabled = false;
+
+        // Reset file list
+        fileListEl.innerHTML =
+          `<li class="file-list-empty">No files loaded.<br>Select your Darkhaven Save folder.</li>`;
       }
   })();
 
@@ -590,6 +664,7 @@ document.addEventListener('DOMContentLoaded', () => {
       legCatalogue[e.id]   = fresh;
       legCatalogue[e.name] = fresh;
     });
+    _resetAchievements();
 
     // Phase 2: scanning legendaries with progress bar
     if (_spinEl) _spinEl.remove();
@@ -626,6 +701,7 @@ document.addEventListener('DOMContentLoaded', () => {
             slot.instances.push({ _key: charKey, charName: data.name, charLevel: data.level,
                                    charClass: data.class, fileName: file.name, item, source: src });
         }
+        _aggregateAchievements(data);
       } catch(e) {
         if (e.name === 'NotReadableError') {
           _lockedFiles.add(file.name);
@@ -647,6 +723,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     renderFileList(loadedFiles);
+    _finalizeAchievements();
+    renderAchievementsPanel();
 
     // Show warning banner if any files were locked by the game
     const _existingBanner = document.getElementById('dh-locked-banner');
@@ -671,6 +749,9 @@ document.addEventListener('DOMContentLoaded', () => {
         '<span class="btn-label">↺ Rescan Save Folder</span>' +
         `<div class="btn-sublabel">${_nChars} character${_nChars!==1?'s':''} · ${_nFiles} file${_nFiles!==1?'s':''} scanned</div>`;
     }
+
+    // Update path display — prompt for path on first pick, else show stored
+    setFolderPathDisplay(false);
   }  // end scanSaveFolder
 
   openFolderBtn.addEventListener('click', async () => {
@@ -694,7 +775,370 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     await idbSet(IDB_KEY, dirHandle);
     await scanSaveFolder(dirHandle);
+    // Prompt for path confirmation on first-ever pick
+    promptFolderPath();
   });
+
+
+
+  // ── Achievement tracking state ────────────────────────────────────────────
+  let achieveKills      = {};  // "blueprint|rarity" → total kills across all chars
+  let achieveTattoos    = 0;   // max tattoo slots filled on any single char
+  let achieveSkillMax   = 0;   // max branches fully-maxed on any single char
+  let achieveDeathsMax  = 0;   // max deaths on any single char (Deathwish)
+  let achieveDeathFree  = false; // any char level 20+ with 0 deaths
+  let achieveHoarder    = false; // any legendary found 3+ times
+  let achieveFullArsenal= false; // any char with all 3 branches assigned
+  let achieveRunes      = new Set(); // all rune nums seen in tattoos across all chars
+  let achieveGems       = new Set(); // all gem types seen in stash across all chars
+  let achieveRuneTypes  = new Set(); // all rune types seen in stash
+
+  function _resetAchievements() {
+    achieveKills       = {};
+    achieveTattoos     = 0;
+    achieveSkillMax    = 0;
+    achieveDeathsMax   = 0;
+    achieveDeathFree   = false;
+    achieveHoarder     = false;
+    achieveFullArsenal = false;
+    achieveRunes       = new Set();
+    achieveGems        = new Set();
+    achieveRuneTypes   = new Set();
+  }
+
+  function _aggregateAchievements(data) {
+    // Kill log
+    for (const entry of data.killLog || []) {
+      const key = entry.blueprint + '|' + entry.rarity;
+      achieveKills[key] = (achieveKills[key] || 0) + entry.count;
+    }
+    // Tattoos
+    const tSlots = (data.tattoos || []).filter(t => t.runeName).length;
+    if (tSlots > achieveTattoos) achieveTattoos = tSlots;
+    // Tattoo rune types (Ash=1, Bat=2, Ka=3, Deb=4, Elm=5)
+    for (const t of data.tattoos || []) {
+      if (t.runeNum) achieveRunes.add(t.runeNum);
+    }
+    // Deaths
+    const deaths = data.deaths || 0;
+    if (deaths > achieveDeathsMax) achieveDeathsMax = deaths;
+    if (!achieveDeathFree && deaths === 0 && (data.level || 0) >= 20) achieveDeathFree = true;
+    // Full Arsenal: all 3 skill branches assigned
+    if (!achieveFullArsenal && (data.skillBranches || []).length >= 3) achieveFullArsenal = true;
+    // Stash: gems + runes
+    for (const item of data.stash || []) {
+      if (item.gemType) achieveGems.add(item.gemType);
+      if (item.runeNum) achieveRuneTypes.add(item.runeNum);
+    }
+    // Also check equipped items for gems
+    for (const item of data.equipment || []) {
+      if (item.gemType) achieveGems.add(item.gemType);
+    }
+    // Skills maxed
+    if (typeof SKILLS_DEF !== 'undefined' && (data.skillLevels||[]).length) {
+      const skByRaw = {};
+      for (const sk of data.skillLevels) skByRaw[sk.skill] = sk;
+      const branchSkills = {};
+      for (const sl of data.skillSlots || []) {
+        if (!sl.group) continue;
+        if (!branchSkills[sl.group]) branchSkills[sl.group] = [];
+        let maxLv = 5;
+        for (const br of SKILLS_DEF) {
+          const found = br.skills.find(s => s.raw === sl.skill);
+          if (found) { maxLv = found.max || 5; break; }
+        }
+        const skd = skByRaw[sl.skill];
+        branchSkills[sl.group].push({ level: skd ? skd.level : 0, maxLv });
+      }
+      let maxedCount = 0;
+      for (const skills of Object.values(branchSkills)) {
+        if (skills.length > 0 && skills.every(s => s.maxLv > 0 && s.level >= s.maxLv)) maxedCount++;
+      }
+      if (maxedCount > achieveSkillMax) achieveSkillMax = maxedCount;
+    }
+  }
+
+  // Called after all chars loaded — hoarder needs legCatalogue which is only complete post-scan
+  function _finalizeAchievements() {
+    achieveHoarder = LEGENDARY_CATALOGUE.some(e => (legCatalogue[e.id]?.instances.length||0) >= 3);
+  }
+
+
+  function renderAchievementsPanel() {
+    const existing = document.getElementById('achievements-panel');
+    if (existing) existing.remove();
+    const panel = document.createElement('div');
+    panel.id = 'achievements-panel';
+    panel.className = 'dh-leg-panel dh-last-panel';
+
+    // ── Build state object for ACHIEVEMENT_DEFS evaluate() functions ─────────
+    const beastKilled = {};
+    for (const sp of BEAST_CATALOGUE)
+      for (const e of sp.entries)
+        beastKilled[e.bp+'|'+e.rarity] = (achieveKills[e.bp+'|'+e.rarity]||0) > 0;
+
+    const nBp = ACHIEVEMENT_BP.narlathak, lBp = ACHIEVEMENT_BP.leviathan;
+    let nKills = 0, lKills = 0;
+    for (const [k,v] of Object.entries(achieveKills)) {
+      if (k.startsWith(nBp)) nKills += v;
+      if (k.startsWith(lBp)) lKills += v;
+    }
+    const legFound = LEGENDARY_CATALOGUE.filter(e => legCatalogue[e.id]?.instances.length > 0).length;
+
+    const state = {
+      beastKilled,
+      beastDone:      Object.values(beastKilled).filter(Boolean).length,
+      beastTotal:     BEAST_TOTAL,
+      narlathakKills: nKills,
+      leviathanKills: lKills,
+      totalKills:     Object.values(achieveKills).reduce((s,v)=>s+v, 0),
+      legFound,
+      legTotal:       LEGENDARY_CATALOGUE.length,
+      tattooMax:      achieveTattoos,
+      runesInTattoos: achieveRunes,
+      skillBranchMax: achieveSkillMax,
+      fullArsenal:    achieveFullArsenal,
+      deathsMax:      achieveDeathsMax,
+      deathFree:      achieveDeathFree,
+      hoarder:        achieveHoarder,
+      gemsInStash:    achieveGems,
+    };
+
+    // ── Evaluate all achievements ─────────────────────────────────────────────
+    const catResults = ACHIEVEMENT_DEFS.map(cat => {
+      const achResults = cat.achievements.map(ach => {
+        const r = ach.evaluate(state);
+        return { ach, earned: r.earned, progress: r.progress, progressMax: r.progressMax };
+      });
+      const catEarned = achResults.filter(r => r.earned).length;
+      return { cat, achResults, catEarned, catTotal: cat.achievements.length };
+    });
+    const totalAch    = catResults.reduce((s,c) => s + c.catTotal, 0);
+    const totalEarned = catResults.reduce((s,c) => s + c.catEarned, 0);
+
+    // ── Panel header ──────────────────────────────────────────────────────────
+    const _collapsed = getPanelCollapsed('achievements');
+    const achHdr = document.createElement('div');
+    achHdr.className = 'dh-leg-hdr';
+    achHdr.style.cursor = 'pointer';
+    achHdr.innerHTML =
+      '<span class="dh-leg-icon">\uD83C\uDFC6</span>' +
+      '<h2 class="dh-leg-hdr-title">Achievements</h2>' +
+      '<span class="dh-leg-hdr-sep">\xB7</span>' +
+      '<span class="dh-leg-hdr-count">' + totalEarned + '\u202F/\u202F' + totalAch +
+        ' earned \xB7 across all saves</span>' +
+      '<span class="dh-leg-hdr-spacer"></span>';
+    const _achTgl = makePanelToggle(_collapsed);
+    achHdr.appendChild(_achTgl);
+    panel.appendChild(achHdr);
+
+    const achBody = document.createElement('div');
+    achBody.className = 'dh-leg-body';
+    if (_collapsed) achBody.style.display = 'none';
+    panel.appendChild(achBody);
+    achHdr.addEventListener('click', () => {
+      const nc = achBody.style.display === 'none';
+      achBody.style.display = nc ? '' : 'none';
+      setPanelCollapsed('achievements', !nc);
+      _achTgl.classList.toggle('dh-panel-toggle--collapsed', !nc);
+    });
+
+    const container = document.createElement('div');
+    container.style.cssText = 'padding:8px 12px 4px;';
+    achBody.appendChild(container);
+
+    // ── Collapsible category section ──────────────────────────────────────────
+    function makeSection(catKey, label, icon, earnedCount, totalCount) {
+      const lsKey = 'dh_ach_cat_' + catKey;
+      let catCollapsed = localStorage.getItem(lsKey) !== '0'; // default: collapsed
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'margin-bottom:8px;border:1px solid rgba(255,255,255,0.07);border-radius:8px;overflow:hidden;';
+
+      const hdr = document.createElement('div');
+      hdr.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;background:rgba(255,255,255,0.03);user-select:none;';
+      const allDone = earnedCount === totalCount;
+      hdr.innerHTML =
+        '<span style="font-size:.9rem;">' + icon + '</span>' +
+        '<span style="font-size:.8rem;font-weight:600;color:' + (allDone?'#d4a84b':'#ccc') + ';flex:1;">' +
+          (allDone?'\u2756 ':'') + esc(label) + '</span>' +
+        '<span style="font-size:.72rem;color:rgba(255,255,255,0.35);">' + earnedCount + '\u202F/\u202F' + totalCount + '</span>';
+
+      const tgl = document.createElement('span');
+      tgl.style.cssText = 'font-size:.75rem;color:rgba(255,255,255,0.35);margin-left:8px;transition:transform .15s;display:inline-block;';
+      tgl.textContent = '\u25BE';
+      if (catCollapsed) tgl.style.transform = 'rotate(-90deg)';
+      hdr.appendChild(tgl);
+      wrap.appendChild(hdr);
+
+      const body = document.createElement('div');
+      body.style.cssText = 'padding:8px 10px 4px;display:' + (catCollapsed?'none':'block') + ';';
+      wrap.appendChild(body);
+
+      hdr.addEventListener('click', () => {
+        catCollapsed = !catCollapsed;
+        localStorage.setItem(lsKey, catCollapsed?'1':'0');
+        body.style.display = catCollapsed ? 'none' : 'block';
+        tgl.style.transform = catCollapsed ? 'rotate(-90deg)' : '';
+      });
+
+      return { wrap, body };
+    }
+
+    // ── Plain achievement card ────────────────────────────────────────────────
+    function makeAchCard(name, desc, isEarned, progress, progressMax) {
+      const card = document.createElement('div');
+      card.style.cssText =
+        'background:' + (isEarned?'rgba(212,168,75,0.08)':'rgba(255,255,255,0.02)') + ';' +
+        'border:1px solid ' + (isEarned?'rgba(212,168,75,0.3)':'rgba(255,255,255,0.06)') + ';' +
+        'border-radius:6px;padding:8px 10px;margin-bottom:6px;';
+      const tr = document.createElement('div');
+      tr.style.cssText = 'display:flex;align-items:baseline;gap:8px;margin-bottom:2px;';
+      tr.innerHTML =
+        '<span style="font-size:.82rem;font-weight:600;color:' + (isEarned?'#d4a84b':'#aaa') + ';">' +
+          (isEarned?'\u2756 ':'') + esc(name) + '</span>' +
+        (progressMax > 0
+          ? '<span style="font-size:.7rem;color:rgba(255,255,255,0.3);margin-left:auto;white-space:nowrap;">' +
+              Math.min(progress,progressMax).toLocaleString() + '\u202F/\u202F' + progressMax.toLocaleString() + '</span>'
+          : '');
+      card.appendChild(tr);
+      const de = document.createElement('div');
+      de.style.cssText = 'font-size:.72rem;color:rgba(255,255,255,0.38);' + (progressMax>0?'margin-bottom:6px;':'');
+      de.textContent = desc;
+      card.appendChild(de);
+      if (progressMax > 0) {
+        const bw = document.createElement('div');
+        bw.style.cssText = 'height:2px;background:rgba(255,255,255,0.07);border-radius:1px;overflow:hidden;';
+        const bf = document.createElement('div');
+        const pct = Math.round(Math.min(progress,progressMax)/progressMax*100);
+        bf.style.cssText = 'height:100%;width:'+pct+'%;border-radius:1px;background:'+(isEarned?'#d4a84b':'#4a7fb5')+';';
+        bw.appendChild(bf);
+        card.appendChild(bw);
+      }
+      return card;
+    }
+
+    // ── Expandable achievement card (for achievements with expandable:true) ───
+    function makeExpandableCard(achId, name, desc, isEarned, progress, progressMax, makeSubFn) {
+      const lsKey = 'dh_ach_expand_' + achId;
+      let expanded = localStorage.getItem(lsKey) === '1'; // default: collapsed
+
+      const card = document.createElement('div');
+      card.style.cssText =
+        'background:' + (isEarned?'rgba(212,168,75,0.08)':'rgba(255,255,255,0.02)') + ';' +
+        'border:1px solid ' + (isEarned?'rgba(212,168,75,0.3)':'rgba(255,255,255,0.06)') + ';' +
+        'border-radius:6px;margin-bottom:6px;overflow:hidden;';
+
+      const hdr = document.createElement('div');
+      hdr.style.cssText = 'padding:8px 10px;cursor:pointer;';
+
+      const tr = document.createElement('div');
+      tr.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:2px;';
+      tr.innerHTML =
+        '<span style="font-size:.82rem;font-weight:600;color:' + (isEarned?'#d4a84b':'#aaa') + ';flex:1;">' +
+          (isEarned?'\u2756 ':'') + esc(name) + '</span>' +
+        (progressMax > 0
+          ? '<span style="font-size:.7rem;color:rgba(255,255,255,0.3);white-space:nowrap;">' +
+              Math.min(progress,progressMax).toLocaleString() + '\u202F/\u202F' + progressMax.toLocaleString() + '</span>'
+          : '');
+      const tgl = document.createElement('span');
+      tgl.style.cssText = 'font-size:.7rem;color:rgba(255,255,255,0.3);transition:transform .15s;display:inline-block;flex-shrink:0;';
+      tgl.textContent = '\u25BE';
+      if (!expanded) tgl.style.transform = 'rotate(-90deg)';
+      tr.appendChild(tgl);
+      hdr.appendChild(tr);
+
+      const de = document.createElement('div');
+      de.style.cssText = 'font-size:.72rem;color:rgba(255,255,255,0.38);' + (progressMax>0?'margin-bottom:6px;':'');
+      de.textContent = desc;
+      hdr.appendChild(de);
+
+      if (progressMax > 0) {
+        const bw = document.createElement('div');
+        bw.style.cssText = 'height:2px;background:rgba(255,255,255,0.07);border-radius:1px;overflow:hidden;';
+        const bf = document.createElement('div');
+        const pct = Math.round(Math.min(progress,progressMax)/progressMax*100);
+        bf.style.cssText = 'height:100%;width:'+pct+'%;border-radius:1px;background:'+(isEarned?'#d4a84b':'#4a7fb5')+';';
+        bw.appendChild(bf);
+        hdr.appendChild(bw);
+      }
+      card.appendChild(hdr);
+
+      const subWrap = document.createElement('div');
+      subWrap.style.cssText = 'padding:0 8px 8px;display:' + (expanded?'block':'none') + ';';
+      subWrap.appendChild(makeSubFn());
+      card.appendChild(subWrap);
+
+      hdr.addEventListener('click', () => {
+        expanded = !expanded;
+        localStorage.setItem(lsKey, expanded?'1':'0');
+        subWrap.style.display = expanded ? 'block' : 'none';
+        tgl.style.transform = expanded ? '' : 'rotate(-90deg)';
+      });
+      return card;
+    }
+
+    // ── Beast grid (sub-content for Hunter Extraordinaire) ────────────────────
+    function makeBeastGrid() {
+      const g = document.createElement('div');
+      g.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:4px;margin-top:8px;';
+      const SHORT = {Normal:'N',Elite:'E',Champion:'C','Champion Minion':'M',Unique:'U',Boss:'B',Named:'\u2605'};
+      for (const sp of BEAST_CATALOGUE) {
+        const allK = sp.entries.every(e => state.beastKilled[e.bp+'|'+e.rarity]);
+        const anyK = sp.entries.some(e => state.beastKilled[e.bp+'|'+e.rarity]);
+        const cell = document.createElement('div');
+        cell.style.cssText =
+          'background:rgba(255,255,255,0.03);border:1px solid ' +
+          (allK?'rgba(212,168,75,0.3)':anyK?'rgba(255,255,255,0.1)':'rgba(255,255,255,0.05)') +
+          ';border-radius:4px;padding:5px 7px;';
+        const nm = document.createElement('div');
+        nm.style.cssText = 'font-size:.68rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' +
+          'color:'+(allK?'#d4a84b':anyK?'#ccc':'rgba(255,255,255,0.25)')+';margin-bottom:4px;';
+        nm.textContent = (allK?'\u2756 ':'')+sp.species;
+        cell.appendChild(nm);
+        const dots = document.createElement('div');
+        dots.style.cssText = 'display:flex;gap:3px;flex-wrap:wrap;';
+        for (const e of sp.entries) {
+          const k = state.beastKilled[e.bp+'|'+e.rarity];
+          const d = document.createElement('span');
+          d.title = e.rarity + (k?' \u2713':' \u2014 not yet killed');
+          d.style.cssText =
+            'display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;' +
+            'border-radius:3px;font-size:.58rem;font-weight:700;background:' +
+            (k?(RARITY_DOT_COLOR[e.rarity]||'#888'):'rgba(255,255,255,0.06)') +
+            ';color:'+(k?'#111':'rgba(255,255,255,0.2)')+';';
+          d.textContent = SHORT[e.rarity]||e.rarity[0];
+          dots.appendChild(d);
+        }
+        cell.appendChild(dots);
+        g.appendChild(cell);
+      }
+      return g;
+    }
+
+    // ── Render all categories from ACHIEVEMENT_DEFS ───────────────────────────
+    for (const { cat, achResults, catEarned, catTotal } of catResults) {
+      const { wrap, body } = makeSection(cat.category, cat.label, cat.icon, catEarned, catTotal);
+      for (const { ach, earned, progress, progressMax } of achResults) {
+        if (ach.expandable) {
+          // Only 'hunter_extraordinaire' uses the beast grid — keyed by id
+          const subFn = ach.id === 'hunter_extraordinaire' ? makeBeastGrid : () => document.createElement('div');
+          body.appendChild(makeExpandableCard(ach.id, ach.name, ach.desc, earned, progress, progressMax, subFn));
+        } else {
+          body.appendChild(makeAchCard(ach.name, ach.desc, earned, progress, progressMax));
+        }
+      }
+      container.appendChild(wrap);
+    }
+
+    const ow = document.querySelector('#equip-container .dh-outer-wrap');
+    if (ow) ow.appendChild(panel);
+    else {
+      const lp = document.getElementById('legendary-panel');
+      if (lp) lp.parentNode.insertBefore(panel, lp.nextSibling);
+      else document.getElementById('equip-container').appendChild(panel);
+    }
+  }
+
 
   // ── Legendary panel render ────────────────────────────────────────────────
   function renderLegendaryPanel() {
@@ -779,7 +1223,17 @@ document.addEventListener('DOMContentLoaded', () => {
           '</div>';
 
         if (found) {
-          card.addEventListener('mouseenter', e => showLegTip(entry, slot, e.clientX, e.clientY));
+          card.addEventListener('mouseenter', e => {
+            const inst = slot.instances[0];
+            const _legItem = Object.assign({}, inst.item, {
+              _tipDividerClass: 'tip-divider--gold',
+              _tipFooterHtml:
+                '<div class="tip-leg-footer">Found <span class="tip-leg-found">' + slot.instances.length + '×</span> across your characters' +
+                (slot.instances.some(i => i.source === 'stash') ? ' &nbsp;<span class="tip-leg-stash">(some in stash)</span>' : '') +
+                '</div>',
+            });
+            showItemTip(_legItem, e.clientX, e.clientY);
+          });
           card.addEventListener('mouseleave', () => hideTip());
         }
 
@@ -833,15 +1287,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ── Shared helper: resolve image src for a socketed item (gem/heart/rune) ──
   // Returns a URL string or null. Used in both tooltip socket rows and paperdoll dot overlays.
-  const _SOCK_RUNE_IMG = {'1':'rune01_ash.png','2':'rune02_bat.png','3':'rune03_ka.png','4':'rune04_deb.png','5':'rune05_elm.png'};
-  const _SOCK_RUNE_NAME_TO_NUM = {'ash rune':'1','bat rune':'2','ka rune':'3','deb rune':'4','elm rune':'5'};
   const _SOCK_GEM_LEVEL = {'cracked':'01','flawed':'02','dull':'03'};
   const _SOCK_GEM_TYPES = ['amber','lapis','jade','ruby','opal','onyx'];
   function socketImgSrc(si) {
     if (!si) return null;
     if (si.type === 'rune') {
-      const runeNum = _SOCK_RUNE_NAME_TO_NUM[(si.name||'').toLowerCase()];
-      return runeNum ? './img/runes/' + _SOCK_RUNE_IMG[runeNum] : null;
+      const runeNum = RUNE_DATA.name_to_num[(si.name||'').toLowerCase()];
+      return runeNum ? './img/runes/' + RUNE_DATA.img[runeNum] : null;
     }
     if (si.type === 'gem') {
       const ln = (si.name||'').toLowerCase();
@@ -859,6 +1311,153 @@ document.addEventListener('DOMContentLoaded', () => {
     return null;
   }
 
+  // Shared heart rarity colours — used by buildSockRow, showItemTip, and anywhere else that colours hearts
+  const HEART_RARITY_COLORS_TIP = { Common:'#90ee90', Elite:'#22c55e', Champion:'#84cc16', Unique:'#c9a84c' };
+
+  // ── Shared affix / tooltip helpers ───────────────────────────────────────
+  // ELEM_COLORS and colorElements are used by buildAffixRows and anywhere else
+  // that needs element-coloured text. Defined once here in outer scope.
+  const ELEM_COLORS = {
+    Fire:'#fa8072', Shadow:'#c084fc', Cold:'#93c5fd',
+    Lightning:'#fde047', Nature:'#86efac', Burn:'#fa8072',
+    Bleed:'#e05050', Slashing:'#d4b8a0', Blunt:'#c9a87c',
+  };
+  function colorElements(str) {
+    return str.replace(/\(?(Fire|Shadow|Cold|Lightning|Nature|Burn|Bleed|Slashing|Blunt)\)?/g,
+      m => {
+        const key = m.replace(/[()]/g, '');
+        const col = ELEM_COLORS[key];
+        if (!col) return m;
+        const hasParen = m.startsWith('(');
+        return (hasParen ? '(' : '') + '<span style="color:' + col + ';">' + key + '</span>' + (hasParen ? ')' : '');
+      });
+  }
+
+  // Shared key map for requirement stat types → charData.stats key
+  const STAT_KEY_MAP = { Magic:'magic', Strength:'strength', Dexterity:'dexterity', Vitality:'vitality' };
+
+  /**
+   * Split raw affixLines into display lines and requirement lines,
+   * and strip Item Set membership lines.
+   * Returns { displayLines, reqLines }.
+   */
+  function filterAffixLines(affixLines) {
+    const reqLines = [], displayLines = [];
+    for (const ln of affixLines) {
+      if (ln.isRequirement)                          { reqLines.push(ln); continue; }
+      if (ln.name && /\bItem Set\b/i.test(ln.name))  { continue; }
+      displayLines.push(ln);
+    }
+    return { displayLines, reqLines };
+  }
+
+  /**
+   * Build the affix section HTML (divider + all affix rows).
+   * @param {Array}  displayLines   — pre-filtered display lines from filterAffixLines()
+   * @param {string} [dividerClass] — extra CSS class on the divider (e.g. 'tip-divider--gold')
+   * @returns {string} HTML or '' if no lines
+   */
+  function buildAffixRows(displayLines, dividerClass) {
+    if (!displayLines.length) return '';
+    let h = '<div class="tip-divider' + (dividerClass ? ' ' + dividerClass : '') + '"></div>';
+    for (const ln of displayLines) {
+      if (ln._header) {
+        h += '<div class="tip-affix-header" style="color:' + (ln.color || 'rgba(255,255,255,0.35)') + ';">' + esc(String(ln.text)) + '</div>';
+        continue;
+      }
+      const isSockLine = ln.socketed;
+
+      // ── Bullet character + CSS class ──────────────────────────────────
+      // Characters and base colors are defined in CSS (::before content).
+      // Inline bulletStyle is used only for dynamic colors (gem, heart rarity).
+      let bulletClass, bulletStyle = '';
+      if (isSockLine) {
+        if (ln.sockType === 'gem') {
+          const _gc   = gemColor(ln.gemName || ln.name || '');
+          bulletClass = 'tip-bullet tip-bullet--gem';
+          bulletStyle = _gc ? 'color:' + _gc + ';' : '';
+        } else if (ln.sockType === 'heart') {
+          const _hc   = HEART_RARITY_COLORS_TIP[ln.heartRarity || 'Common'] || '#f87171';
+          bulletClass = 'tip-bullet tip-bullet--heart';
+          bulletStyle = 'color:' + _hc + ';';
+        } else {
+          bulletClass = 'tip-bullet tip-bullet--rune';
+        }
+      } else {
+        bulletClass = 'tip-bullet tip-bullet--regular';
+      }
+
+      // ── Line text HTML ──
+      let lineHtml;
+      if (ln.text != null) {
+        lineHtml = '<span class="tip-affix-line" style="color:' + (ln.color || '#e2e8f0') + ';">' + colorElements(esc(String(ln.text))) + '</span>';
+      } else if (ln.isFlaskProp) {
+        lineHtml = '<span class="tip-affix-line tip-affix-flask">' + esc(ln.name) + '</span>';
+      } else if (isSockLine) {
+        // Text stays white — only the bullet is coloured. Element keywords in value/name still get coloured.
+        lineHtml = '<span class="tip-affix-line">' +
+          '<span class="tip-affix-val">' + colorElements(esc(String(ln.value ?? ''))) + '</span>' +
+          '<span class="tip-affix-name">' + colorElements(esc(ln.name ? ' ' + ln.name : '')) + '</span>' +
+          '</span>';
+      } else {
+        lineHtml = '<span class="tip-affix-line">' +
+          '<span class="tip-affix-val">' + colorElements(esc('+' + String(ln.value ?? ''))) + '</span>' +
+          '<span class="tip-affix-name">' + colorElements(esc(ln.name ? ' ' + ln.name : '')) + '</span>' +
+          '</span>';
+      }
+
+      h += '<div class="tip-affix-row">' +
+           '<span class="' + bulletClass + '"' + (bulletStyle ? ' style="' + bulletStyle + '"' : '') + '></span>' +
+           lineHtml +
+           '</div>';
+    }
+    return h;
+  }
+
+  /**
+   * Build the requirements block HTML.
+   * @param {Array}  reqLines  — requirement lines from filterAffixLines()
+   * @param {object} [item]    — item object (for heartIsUniqueSocket, tome fields)
+   * @returns {string} HTML or ''
+   */
+  function buildReqBlock(reqLines, item) {
+    const _isTome = item && item.slot === 'tome';
+    const _TOME_ATTR_PROTO = {
+      'cf5c6725d0622e94a8d9869526914357': 'Vitality',
+      'fe2f09265d25eb5488ecd81b076fcf63': 'Strength',
+      'a3f14410163b5bc42b72e51ad9a4bc8e': 'Dexterity',
+      'cf6a5e41fac71de48b7fc87aa12ab252': 'Magic',
+    };
+    const _tomeAttr = _isTome && item.tomeReqAttrProto ? (_TOME_ATTR_PROTO[item.tomeReqAttrProto] || null) : null;
+    const hasAny = reqLines.length > 0 || (item && item.heartIsUniqueSocket) || _isTome;
+    if (!hasAny) return '';
+
+    const _cStats = _currentCharData?.stats || {};
+    const _cLevel = _currentCharData?.level || 0;
+    let h = '<div class="tip-req-block"><div class="tip-req-label">Requires:</div>';
+    for (const req of reqLines) {
+      const valStr   = String(req.value || '');
+      const _qMatch  = valStr.match(/^(\d+)\s*\((.+?)\)$/);
+      let reqType = 'Level', reqNum = parseInt(valStr) || 0;
+      if (_qMatch) { reqNum = parseInt(_qMatch[1]); reqType = _qMatch[2]; }
+      const _statKey = STAT_KEY_MAP[reqType];
+      const _charVal = _statKey ? (_cStats[_statKey] || 0) : _cLevel;
+      const isMet    = _charVal >= reqNum;
+      h += '<div class="tip-req-row"><span style="color:' + (isMet ? '#eee' : '#ef4444') + ';">' + esc(reqType) + ' ' + reqNum + '</span></div>';
+    }
+    if (item && item.heartIsUniqueSocket)
+      h += '<div class="tip-req-row"><span style="color:#d4a847;">Unique Socket</span></div>';
+    if (_isTome && _tomeAttr && item.tomeReqValue) {
+      const _charAttrVal = _cStats[STAT_KEY_MAP[_tomeAttr] || ''] || 0;
+      const _reqMet = _charAttrVal >= item.tomeReqValue;
+      h += '<div class="tip-req-row"><span style="color:' + (_reqMet ? '#eee' : '#ef4444') + ';">' + esc(_tomeAttr) + ' ' + item.tomeReqValue + '</span></div>';
+    }
+    if (_isTome)
+      h += '<div class="tip-req-row"><span style="color:#ef4444;">Usable once per character</span></div>';
+    h += '</div>';
+    return h;
+  }
+
   // Tooltip for equipment cards (paperdoll)
   function showItemTip(item, x, y) {
     const t = ensureTip();
@@ -868,10 +1467,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ── Resolve top-right image src ────────────────────────────────────
     let _tipImgSrc = null;
-    const _RUNE_IMG = {'1':'rune01_ash.png','2':'rune02_bat.png','3':'rune03_ka.png','4':'rune04_deb.png','5':'rune05_elm.png'};
     const _isJewelrySlot = ['neck','finger_1','finger_2','flask','ring'].includes(item.slot);
-    if (item.runeNum && _RUNE_IMG[item.runeNum])
-      _tipImgSrc = './img/runes/' + _RUNE_IMG[item.runeNum];
+    if (item.runeNum && RUNE_DATA.img[item.runeNum])
+      _tipImgSrc = './img/runes/' + RUNE_DATA.img[item.runeNum];
     else if (isLeg && LEG_IMAGES[item.legendaryName])
       _tipImgSrc = 'img/items/' + LEG_IMAGES[item.legendaryName];
     else if (item.gemType && item.gemLevel != null)
@@ -900,7 +1498,6 @@ document.addEventListener('DOMContentLoaded', () => {
       ? ' <span class="tip-sock-badge' + (_tipHasUniq ? ' tip-sock-badge--gold' : '') + '">' +
         _tipSC + '</span>'
       : '';
-    const HEART_RARITY_COLORS_TIP = { Common:'#90ee90', Elite:'#22c55e', Champion:'#84cc16', Unique:'#c9a84c' };
     const _heartTipColor = item.heartName ? (HEART_RARITY_COLORS_TIP[item.heartRarity] || '#90ee90') : null;
     const _nameColor = _heartTipColor || (isLeg ? '#c9a84c'
       : item.rarity === 'Rare'   ? '#fde047'
@@ -920,25 +1517,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (item.level) subtitleParts.push('iLv ' + item.level);
     _headerHtml += '<div class="tip-subtitle" style="color:' + _subtitleColor + ';">' + subtitleParts.join(' · ') + '</div>';
 
-    // Wrap header with top-right image via buildTipImg
-    let h = buildTipImg(_tipImgSrc, _headerHtml, _tipImgClass);
-    // ── Primary stat: armor / damage ───────────────────────────────────
-    if (item.damageMin != null) {
-      const _dmgElem = item.damageType;
-      const ELEM_COLORS_TIP = { Fire:'#f87171', Shadow:'#c084fc', Cold:'#93c5fd', Lightning:'#fde047', Nature:'#86efac' };
-      const _dmgCol = (_dmgElem && ELEM_COLORS_TIP[_dmgElem]) ? ELEM_COLORS_TIP[_dmgElem] : '#f8d08a';
-      h += '<div class="tip-dmg-row">' +
-           '<span class="tip-dmg-icon">⚔</span>' +
-           '<span class="tip-dmg-val" style="color:' + _dmgCol + ';">' +
-           item.damageMin + '–' + item.damageMax +
-           (_dmgElem ? ' <span class="tip-dmg-elem" style="color:' + _dmgCol + ';">(' + esc(_dmgElem) + ')</span>' : '') +
-           '</span></div>';
-    }
-    if (item.armor)
-      h += '<div class="tip-armor-row"><span class="tip-armor-icon">🛡</span><span class="tip-armor-val">' + item.armor + ' Armor</span></div>';
-    // ── Dye info: palette icon + name + chips ──────────────────────────
-    // When the item itself is a dye, name is already the tooltip header — skip it.
-    // When an item has a dye applied, show the dye name so the user knows what palette it is.
+    // ── Dye info directly under subtitle — no dividers ────────────────
     if (item.dyeColor) {
       const _dyeDisplayName = resolveDyeName(item);
       const _dyeTokens = (item.dyeColors || item.dyeColor.split(/(?=[A-Z])/).map(s=>s.trim()).filter(Boolean));
@@ -947,33 +1526,38 @@ document.addEventListener('DOMContentLoaded', () => {
         return '<span class="tip-dye-chip" style="background:' + css + ';" title="' + esc(tok) + '"></span>';
       }).join('');
       const _isDyeItem = !!item.dyeName;
-      h += '<div class="tip-dye-row">' +
-           '<span class="tip-dye-icon">🎨</span>' +
-           (!_isDyeItem ? '<span class="tip-dye-name">' + esc(_dyeDisplayName) + '</span>' : '') +
-           '<span class="tip-dye-chips">' + _chips + '</span>' +
-           '</div>';
+      _headerHtml +=
+        '<div class="tip-dye-row">' +
+        '<span class="tip-dye-icon">🎨</span>' +
+        (!_isDyeItem ? '<span class="tip-dye-name">' + esc(_dyeDisplayName) + '</span>' : '') +
+        '<span class="tip-dye-chips">' + _chips + '</span>' +
+        '</div>';
     }
-    // ── Affixes with ♦ bullets (like in-game) ──────────────────────────
-    // For unslotted runes in stash: inject tattoo effect + socket effects
+
+    // ── Primary stat: armor / damage — included in header so image spans full pre-divider height ──
+    if (item.damageMin != null) {
+      const _dmgElem = item.damageType;
+      const ELEM_COLORS_TIP = { Fire:'#f87171', Shadow:'#c084fc', Cold:'#93c5fd', Lightning:'#fde047', Nature:'#86efac' };
+      const _dmgCol = (_dmgElem && ELEM_COLORS_TIP[_dmgElem]) ? ELEM_COLORS_TIP[_dmgElem] : '#f8d08a';
+      _headerHtml +=
+        '<div class="tip-dmg-row">' +
+        '<span class="tip-dmg-icon">⚔</span>' +
+        '<span class="tip-dmg-val" style="color:' + _dmgCol + ';">' +
+        item.damageMin + '–' + item.damageMax +
+        (_dmgElem ? ' <span class="tip-dmg-elem" style="color:' + _dmgCol + ';">(' + esc(_dmgElem) + ')</span>' : '') +
+        '</span></div>';
+    }
+    if (item.armor)
+      _headerHtml += '<div class="tip-armor-row"><span class="tip-armor-icon">🛡</span><span class="tip-armor-val">' + item.armor + ' Armor</span></div>';
+
+    // Image spans name + subtitle + dye + armor/damage — all pre-divider content
+    let h = buildTipImg(_tipImgSrc, _headerHtml, _tipImgClass);
+    // ── Affixes ────────────────────────────────────────────────────────
     const _affixLines = [...(item.affixLines||[])];
     if (item.runeNum && !_affixLines.length) {
-      // Stash rune tooltip: build inline from the rune maps
-      const _RUNE_EFFECT_HINT = {
-        '1':'Lightning shocks nearby enemies during your Glyph Lunge.',
-        '2':'Blood Lash has a 50% chance to entangle enemies.',
-        '3':'You are limited to 2 Crows, but they are eternal.',
-        '4':'Your Spine Breaker follows an arcing path.',
-        '5':'Your Bone Storm fires multiple missiles of blood rather than bone.',
-      };
-      const _RUNE_SOCKET_EFFECTS = {
-        '1':[{slots:'Weapon, Helm, Gloves',effect:'+11 Attack'},{slots:'Chest, Belt, Boots, Shield',effect:'+11 Armor'}],
-        '2':[{slots:'Weapon',effect:'25% chance to Bleed on hit'},{slots:'Helm, Gloves',effect:'+20% Bleed Duration'},{slots:'Chest, Shield',effect:'+25% Reduced Bleed Duration'},{slots:'Belt, Boots',effect:'+0.2/s Life Regen'}],
-        '3':[{slots:'Weapon',effect:'+13% Shadow Penetration'},{slots:'Any armor piece',effect:'+3% Magic Find'}],
-        '4':[{slots:'Weapon',effect:'+13% Blunt Penetration'},{slots:'Helm, Gloves',effect:'+20% Stun Duration'},{slots:'Chest, Shield',effect:'+20% Reduced Stun Duration'},{slots:'Belt, Boots',effect:'+5% Gold Find'}],
-        '5':[{slots:'Weapon',effect:'+13% Slashing Penetration'},{slots:'Helm, Gloves',effect:'+20% Bleed Duration'},{slots:'Chest, Shield',effect:'+20% Reduced Bleed Duration'},{slots:'Belt, Boots',effect:'+1 Stamina'}],
-      };
-      const _tattooEffect = _RUNE_EFFECT_HINT[item.runeNum];
-      const _sockEffects  = _RUNE_SOCKET_EFFECTS[item.runeNum];
+      // Stash rune tooltip: built from RUNE_DATA in rune_recipes.js
+      const _tattooEffect = RUNE_DATA.tattoo_effect[item.runeNum];
+      const _sockEffects  = RUNE_DATA.socket_effects[item.runeNum];
       if (_sockEffects) {
         _affixLines.push({ text:'Socket in item for effect:', color:'rgba(255,255,255,0.35)', _header:true });
         for (const e of _sockEffects) _affixLines.push({ text: e.slots + ': ' + e.effect, color:'#94a3b8' });
@@ -983,127 +1567,13 @@ document.addEventListener('DOMContentLoaded', () => {
         _affixLines.push({ text: _tattooEffect, color:'#a78bfa' });
       }
     }
-    // Separate requirement lines from regular affix display
-    const _reqLines      = [];
-    const _displayLines  = _affixLines.filter(ln => {
-      if (ln.isRequirement)                        { _reqLines.push(ln); return false; }
-      if (ln.name && /\bItem Set\b/i.test(ln.name)) return false; // skip item set membership lines
-      return true;
-    });
-    if (_displayLines.length) {
-      h += '<div class="tip-divider"></div>';
-      for (const ln of _displayLines) {
-        if (ln._header) {
-          h += '<div class="tip-affix-header" style="color:' + (ln.color||'rgba(255,255,255,0.35)') + ';">' + esc(String(ln.text)) + '</div>';
-          continue;
-        }
-        const isLegLine  = isLeg;
-        const isSockLine = ln.socketed;
-        const _affGemC   = (isSockLine && ln.sockType === 'gem') ? gemColor(ln.name || '') : null;
-        const bulletCol  = _affGemC || '#ffffff';
-        const bullet     = isSockLine ? (ln.sockType==='heart'?'♥':ln.sockType==='rune'?'ᚱ':'◆') : '♦';
+    const { displayLines: _displayLines, reqLines: _reqLines } = filterAffixLines(_affixLines);
+    h += buildAffixRows(_displayLines, item._tipDividerClass || '');
+    h += buildSockRow(item);
+    h += buildReqBlock(_reqLines, item);
 
-        const ELEM_COLORS = { Fire:'#fa8072', Shadow:'#c084fc', Cold:'#93c5fd', Lightning:'#fde047', Nature:'#86efac', Burn:'#fa8072', Bleed:'#e05050', Slashing:'#d4b8a0' };
-        function colorElements(str) {
-          return str.replace(/\b(Fire|Shadow|Cold|Lightning|Nature|Burn|Bleed)\b/g,
-            m => '<span style="color:' + (ELEM_COLORS[m]||'#eee') + ';">' + m + '</span>');
-        }
-
-        let lineHtml;
-        if (ln.text != null) {
-          lineHtml = '<span class="tip-affix-line" style="color:' + (ln.color||'#e2e8f0') + ';">' + colorElements(esc(String(ln.text))) + '</span>';
-        } else if (ln.isFlaskProp) {
-          lineHtml = '<span class="tip-affix-line tip-affix-flask">' + esc(ln.name) + '</span>';
-        } else if (isSockLine) {
-          const textCol = _affGemC || '#e2e8f0';
-          lineHtml = '<span class="tip-affix-line" style="color:' + (ln.color || textCol) + ';">' +
-            colorElements(esc(String(ln.value ?? '')) + (ln.name ? ' ' + ln.name : '')) + '</span>';
-        } else {
-          const valStr  = '+' + String(ln.value ?? '');
-          const nameStr = ln.name ? ' ' + ln.name : '';
-          lineHtml = '<span class="tip-affix-line">' +
-                     '<span class="tip-affix-val">' + esc(valStr) + '</span>' +
-                     '<span class="tip-affix-name">' + colorElements(esc(nameStr)) + '</span>' +
-                     '</span>';
-        }
-        h += '<div class="tip-affix-row">' +
-             '<span class="tip-bullet" style="color:' + bulletCol + ';">' + bullet + '</span>' +
-             lineHtml +
-             '</div>';
-      }
-    }
-
-    // ── Sockets ──────────────────────────────────────────────────────
-    const tipSockCount = Math.max(item.socketCount || 0, (item.socketed||[]).length);
-    if (tipSockCount > 0) {
-      const tipSocketed = item.socketed || [];
-      const tipSlots = [...(item.socketSlots || [])].sort((a,b) => a==='unique'?-1:b==='unique'?1:0);
-      let sockRow = '';
-      for (let s = 0; s < tipSockCount; s++) {
-        const si = tipSocketed[s];
-        const isUniq = tipSlots[s] === 'unique';
-        const _tipGemC = (si && si.type==='gem') ? gemColor(si.name) : null;
-        const _heartCol = (si && si.type==='heart') ? (HEART_RARITY_COLORS_TIP[si.heartRarity || si.rarity] || '#90ee90') : null;
-        const circleCol = isUniq ? '#d4a847' : '#d1d5db';
-        const contentCol = _heartCol || _tipGemC || circleCol;
-        const _sockImg = si ? socketImgSrc(si) : null;
-        const _borderStyle = isUniq
-          ? 'border:2px solid #d4a847;box-shadow:0 0 5px #c9a84c88;background:rgba(201,168,76,0.10);'
-          : 'border:1.5px solid ' + circleCol + ';background:rgba(0,0,0,0.4);';
-        const _baseCircle = 'display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;overflow:hidden;margin-right:3px;flex-shrink:0;' + _borderStyle + (si?'':'opacity:' + (isUniq?'0.5':'0.3') + ';');
-        const _innerHtml = _sockImg
-          ? '<img src="' + _sockImg + '" class="dh-sock-dot-img" onerror="this.style.display=\'none\'">'
-          : (si ? '<span style="font-size:0.55rem;color:' + contentCol + ';">' + (si.type==='heart'?'♥':si.type==='rune'?'ᚱ':'◆') + '</span>' : '');
-        sockRow += '<span style="' + _baseCircle + '">' + _innerHtml + '</span>';
-        if (si) sockRow += '<span style="font-size:0.65rem;color:' + contentCol + ';margin-right:8px;">' + esc(si.name||si.type) + '</span>';
-      }
-      h += '<div class="tip-sock-row">' + sockRow + '</div>';
-    }
-
-    // ── Requirements section ─────────────────────────────────────────
-    // Attribute proto → display name (from DH_GUIDS)
-    const _TOME_ATTR_PROTO = {
-      'cf5c6725d0622e94a8d9869526914357': 'Vitality',
-      'fe2f09265d25eb5488ecd81b076fcf63': 'Strength',
-      'a3f14410163b5bc42b72e51ad9a4bc8e': 'Dexterity',
-      'cf6a5e41fac71de48b7fc87aa12ab252': 'Magic',
-    };
-    const _isTome = item.slot === 'tome';
-    const _tomeAttr = _isTome && item.tomeReqAttrProto ? (_TOME_ATTR_PROTO[item.tomeReqAttrProto] || null) : null;
-    const _hasReqs  = _reqLines.length > 0 || item.heartIsUniqueSocket || _isTome;
-    if (_hasReqs) {
-      h += '<div class="tip-req-block">';
-      h += '<div class="tip-req-label">Requires:</div>';
-      const _cStats = _currentCharData?.stats || {};
-      const _cLevel = _currentCharData?.level || 0;
-      const STAT_KEY_MAP = { Magic:'magic', Strength:'strength', Dexterity:'dexterity', Vitality:'vitality' };
-      // Standard affix requirement lines (non-tome items)
-      for (const req of _reqLines) {
-        const valStr = String(req.value || '');
-        const _qMatch = valStr.match(/^(\d+)\s*\((.+?)\)$/);
-        let reqType = 'Level', reqNum = parseInt(valStr) || 0;
-        if (_qMatch) { reqNum = parseInt(_qMatch[1]); reqType = _qMatch[2]; }
-        const _statKey = STAT_KEY_MAP[reqType];
-        const _charVal = _statKey ? (_cStats[_statKey] || 0) : _cLevel;
-        const isMet = _charVal >= reqNum;
-        h += '<div class="tip-req-row"><span style="color:' + (isMet ? '#eee' : '#ef4444') + ';">' +
-             esc(reqType) + ' ' + reqNum + '</span></div>';
-      }
-      if (item.heartIsUniqueSocket) {
-        h += '<div class="tip-req-row"><span style="color:#d4a847;">Unique Socket</span></div>';
-      }
-      // Tome-specific requirements: attribute + "Usable once per character"
-      if (_isTome && _tomeAttr && item.tomeReqValue) {
-        const _charAttrVal = _cStats[STAT_KEY_MAP[_tomeAttr] || ''] || 0;
-        const _reqMet = _charAttrVal >= item.tomeReqValue;
-        h += '<div class="tip-req-row"><span style="color:' + (_reqMet ? '#eee' : '#ef4444') + ';">' +
-             esc(_tomeAttr) + ' ' + item.tomeReqValue + '</span></div>';
-      }
-      if (_isTome) {
-        h += '<div class="tip-req-row"><span style="color:#ef4444;">Usable once per character</span></div>';
-      }
-      h += '</div>';
-    }
+    // ── Optional footer (e.g. legendary found-count) ─────────────────
+    if (item._tipFooterHtml) h += item._tipFooterHtml;
 
     // ── Flavour text for legendaries ─────────────────────────────────
     if (isLeg && item.legendaryName) {
@@ -1120,65 +1590,34 @@ document.addEventListener('DOMContentLoaded', () => {
     posTip(x, y);
   }
 
-  // Tooltip for legendary catalogue cards
-  function showLegTip(entry, slot, x, y) {
-    const t = ensureTip();
-    const inst = slot.instances[0];
-    const item = inst.item;
-    const imgFile = LEG_IMAGES[entry.id];
-
-    let _legHeader =
-      `<div class="tip-leg-name">${esc(entry.name)}</div>` +
-      `<div class="tip-leg-slot">Legendary ${esc(entry.slot)}</div>`;
-    let h = buildTipImg(imgFile ? 'img/items/' + imgFile : null, _legHeader);
-
-    if (item.damageMin != null)
-      h += `<div class="tip-leg-dmg">⚔ ${item.damageMin}–${item.damageMax}${item.damageType?' ('+esc(item.damageType)+')':''}</div>`;
-    if (item.armor)
-      h += `<div class="tip-leg-armor">🛡 ${item.armor} Armor</div>`;
-
-    if (item.affixLines.length) {
-      h += '<div class="tip-divider tip-divider--gold"></div>';
-      const _legReqLines = [];
-      const _legDisplayLines = item.affixLines.filter(ln => {
-        if (ln.isRequirement) { _legReqLines.push(ln); return false; }
-        if (ln.name && /\bItem Set\b/i.test(ln.name)) return false;
-        return true;
-      });
-      for (const ln of _legDisplayLines)
-        h += `<div class="tip-leg-affix">+${esc(String(ln.value))} ${esc(ln.name)}</div>`;
-      // Requirements block (right-aligned, same as showItemTip)
-      if (_legReqLines.length > 0) {
-        h += '<div class="tip-req-block">';
-        h += '<div class="tip-req-label">Requires:</div>';
-        const _cStats = _currentCharData?.stats || {};
-        const _cLevel = _currentCharData?.level || 0;
-        const STAT_KEY_MAP2 = { Magic:'magic', Strength:'strength', Dexterity:'dexterity', Vitality:'vitality' };
-        for (const req of _legReqLines) {
-          const valStr = String(req.value || '');
-          const _qMatch = valStr.match(/^(\d+)\s*\((.+?)\)$/);
-          let reqType = 'Level', reqNum = parseInt(valStr) || 0;
-          if (_qMatch) { reqNum = parseInt(_qMatch[1]); reqType = _qMatch[2]; }
-          const _statKey = STAT_KEY_MAP2[reqType];
-          const _charVal = _statKey ? (_cStats[_statKey] || 0) : _cLevel;
-          const isMet = _charVal >= reqNum;
-          h += '<div class="tip-req-row"><span style="color:' + (isMet ? '#eee' : '#ef4444') + ';">' +
-               esc(reqType) + ' ' + reqNum + '</span></div>';
-        }
-        h += '</div>';
-      }
+  // ── Shared socket row builder ─────────────────────────────────────────────
+  // Returns an HTML string for the socket row, or '' if the item has no sockets.
+  // Used by showItemTip (which handles all item types including legendaries).
+  function buildSockRow(item) {
+    const sockCount = Math.max(item.socketCount || 0, (item.socketed||[]).length);
+    if (!sockCount) return '';
+    const socketed = item.socketed || [];
+    const slots = [...(item.socketSlots || [])].sort((a,b) => a==='unique'?-1:b==='unique'?1:0);
+    let row = '';
+    for (let s = 0; s < sockCount; s++) {
+      const si = socketed[s];
+      const isUniq = slots[s] === 'unique';
+      const _gemC    = (si && si.type==='gem')   ? gemColor(si.name)                                             : null;
+      const _heartC  = (si && si.type==='heart') ? (HEART_RARITY_COLORS_TIP[si.heartRarity||si.rarity]||'#90ee90') : null;
+      const circleCol  = isUniq ? '#d4a847' : '#d1d5db';
+      const contentCol = _heartC || _gemC || circleCol;
+      const _sockImg   = si ? socketImgSrc(si) : null;
+      const _border    = isUniq
+        ? 'border:2px solid #d4a847;box-shadow:0 0 5px #c9a84c88;background:rgba(201,168,76,0.10);'
+        : 'border:1.5px solid ' + circleCol + ';background:rgba(0,0,0,0.4);';
+      const _circle = 'display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;overflow:hidden;flex-shrink:0;' + _border + (si?'':'opacity:'+(isUniq?'0.5':'0.3')+';');
+      const _inner  = _sockImg
+        ? '<img src="' + _sockImg + '" class="dh-sock-dot-img" onerror="this.style.display=\'none\'">'
+        : (si ? '<span style="font-size:0.55rem;color:'+contentCol+';">'+(si.type==='heart'?'♥':si.type==='rune'?'ᚱ':'◆')+'</span>' : '');
+      const _name = si ? '<span style="font-size:0.65rem;color:'+contentCol+';margin-left:3px;">'+esc(si.name||si.type)+'</span>' : '';
+      row += '<span style="display:inline-flex;align-items:center;white-space:nowrap;margin-right:5px;"><span style="'+_circle+'">'+_inner+'</span>'+_name+'</span>';
     }
-
-    const hasStash = slot.instances.some(i => i.source === 'stash');
-    const cnt = slot.instances.length;
-    h += '<div class="tip-leg-footer">' +
-      'Found <span class="tip-leg-found">' + cnt + '×</span> across your characters' +
-      (hasStash ? ' &nbsp;<span class="tip-leg-stash">(some in stash)</span>' : '') +
-      '</div>';
-
-    t.innerHTML = h;
-    t.style.display = 'block';
-    posTip(x, y);
+    return '<div class="tip-sock-row">' + row + '</div>';
   }
 
   // ── File grouping helpers ─────────────────────────────────────────────────
@@ -1211,6 +1650,12 @@ document.addEventListener('DOMContentLoaded', () => {
   async function renderFileList(files) {
     fileListEl.innerHTML = '';  // clear including any "no files loaded" message
     let allGroups = groupFiles(files);
+    // Sort groups alphabetically by character name (using cached parse data where available)
+    allGroups.sort((a, b) => {
+      const nameA = (charCache[a[0].name]?.name || '').toLowerCase();
+      const nameB = (charCache[b[0].name]?.name || '').toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
     // Apply last-N limit if enabled
     const groups = allGroups.map(g => limitEnabled ? g.slice(0, limitCount) : g);
     let firstLoad = true;
@@ -1293,48 +1738,76 @@ document.addEventListener('DOMContentLoaded', () => {
         subList.appendChild(fi);
       }
 
-      // Click: if already expanded → toggle collapse; otherwise collapse others, expand this, load latest
-      card.addEventListener('click', () => {
+      // ── Helpers ────────────────────────────────────────────────────
+      const arrow = card.querySelector('.dh-char-arrow');
+
+      function collapseCard(c) {
+        c.dataset.expanded = 'false';
+        const a = c.querySelector('.dh-char-arrow');
+        const sl = c.parentElement.querySelector('ul');
+        if (a)  a.style.transform = '';
+        if (sl) sl.style.display  = 'none';
+      }
+      function collapseAllOthers() {
+        fileListEl.querySelectorAll('.dh-char-card').forEach(c => {
+          if (c !== card) { c.classList.remove('dh-char-card--active'); collapseCard(c); }
+        });
+      }
+      function expandThisCard() {
+        card.dataset.expanded = 'true';
+        subList.style.display = 'block';
+        arrow.style.transform = 'rotate(180deg)';
+      }
+      function setActive() {
+        card.classList.add('dh-char-card--active');
+      }
+
+      // Card body click:
+      //   - already active → toggle file list expand/collapse (no re-load)
+      //   - different char  → load latest, mark active, collapse all file lists
+      card.querySelector('.dh-char-info').addEventListener('click', () => {
+        const isActive = card.classList.contains('dh-char-card--active');
+        if (isActive) {
+          // Toggle this card's file list
+          if (card.dataset.expanded === 'true') { collapseCard(card); }
+          else { collapseAllOthers(); expandThisCard(); }
+        } else {
+          collapseAllOthers();
+          collapseCard(card);
+          setActive();
+          loadChar(latest);
+        }
+      });
+
+      // Triangle click → expand/collapse; if different char → also load + mark active
+      arrow.addEventListener('click', (e) => {
+        e.stopPropagation();
         const isExpanded = card.dataset.expanded === 'true';
+        const isActive   = card.classList.contains('dh-char-card--active');
 
         if (isExpanded) {
-          // Collapse this card
-          card.dataset.expanded = 'false';
-          subList.style.display = 'none';
-          card.querySelector('.dh-char-arrow').style.transform = '';
-          return;
+          // Collapse this card's file list only — keep char loaded
+          collapseCard(card);
+        } else {
+          // Expand: collapse all others first
+          collapseAllOthers();
+          expandThisCard();
+          // If this wasn't the active char, load it now
+          if (!isActive) {
+            setActive();
+            loadChar(latest);
+          }
         }
-
-        // Collapse every other card + clear active state
-        fileListEl.querySelectorAll('.dh-char-card').forEach(otherCard => {
-          if (otherCard === card) return;
-          otherCard.dataset.expanded = 'false';
-          otherCard.classList.remove('dh-char-card--active');
-          const otherArrow   = otherCard.querySelector('.dh-char-arrow');
-          const otherSubList = otherCard.parentElement.querySelector('ul');
-          if (otherArrow)   otherArrow.style.transform = '';
-          if (otherSubList) otherSubList.style.display  = 'none';
-        });
-
-        // Expand this card, mark as active, and load latest
-        card.dataset.expanded = 'true';
-        card.classList.add('dh-char-card--active');
-        subList.style.display = 'block';
-        card.querySelector('.dh-char-arrow').style.transform = 'rotate(180deg)';
-        loadChar(latest);
       });
 
       wrapper.appendChild(card);
       wrapper.appendChild(subList);
       fileListEl.appendChild(wrapper);
 
-      // Auto-load first character's latest file
+      // Auto-load first character — collapsed, just mark active
       if (firstLoad) {
         firstLoad = false;
-        card.dataset.expanded = 'true';
-        card.classList.add('dh-char-card--active');
-        subList.style.display = 'block';
-        card.querySelector('.dh-char-arrow').style.transform = 'rotate(180deg)';
+        setActive();
         loadChar(latest);
       }
     }
@@ -1366,7 +1839,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
       renderChar(data);
+      _aggregateAchievements(data);
+      _finalizeAchievements();
       renderLegendaryPanel();
+      renderAchievementsPanel();
     } catch(err) {
       console.error(err);
       if (err.name === 'NotReadableError') {
@@ -1907,15 +2383,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Rune: show image + name
       if (item.runeNum) {
-        const RUNE_IMG_NEW = {'1':'rune01_ash.png','2':'rune02_bat.png','3':'rune03_ka.png','4':'rune04_deb.png','5':'rune05_elm.png'};
-        const RUNE_IMG_OLD = {'1':'rune_ash.png','2':'rune_bat.png','3':'rune_ka.png','4':'rune_deb.png','5':'rune_elm.png'};
         cell.style.alignItems = 'center'; cell.style.justifyContent = 'center';
         cell.style.background = 'rgba(103,65,180,0.2)'; cell.style.borderColor = 'rgba(147,112,219,0.5)';
         const rImg = document.createElement('img');
-        rImg.src = './img/runes/' + RUNE_IMG_NEW[item.runeNum];
+        rImg.src = './img/runes/' + RUNE_DATA.img[item.runeNum];
         rImg.alt = item.runeName || '';
         rImg.style.cssText = 'width:' + (w*CELL-10) + 'px;height:' + (w*CELL-10) + 'px;object-fit:contain;filter:drop-shadow(0 0 4px rgba(167,139,250,0.7));';
-        rImg.onerror = () => { rImg.src = './img/runes/' + RUNE_IMG_OLD[item.runeNum]; rImg.onerror = () => { rImg.style.display='none'; }; };
+        rImg.onerror = () => { rImg.src = './img/runes/' + RUNE_DATA.img_legacy[item.runeNum]; rImg.onerror = () => { rImg.style.display='none'; }; };
         cell.appendChild(rImg);
 
       } else if (item.gemType && item.gemLevel != null) {
@@ -2103,13 +2577,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const dn    = resolveItemDisplayName(item);
         const row = document.createElement('div');
         row.className = 'dh-list-row' + (isLeg ? ' dh-list-row--leg' : '');
-        const RUNE_IMG_LIST = {'1':'rune01_ash.png','2':'rune02_bat.png','3':'rune03_ka.png','4':'rune04_deb.png','5':'rune05_elm.png'};
-        const RUNE_IMG_LIST_OLD = {'1':'rune_ash.png','2':'rune_bat.png','3':'rune_ka.png','4':'rune_deb.png','5':'rune_elm.png'};
         const _dispType = getDisplayType(item);
         let _listImgSrc = null;
         let _listImgExtraStyle = '';
         if (item.runeNum) {
-          _listImgSrc = './img/runes/' + (RUNE_IMG_LIST[item.runeNum] || RUNE_IMG_LIST_OLD[item.runeNum]);
+          _listImgSrc = './img/runes/' + (RUNE_DATA.img[item.runeNum] || RUNE_DATA.img_legacy[item.runeNum]);
           _listImgExtraStyle = 'filter:drop-shadow(0 0 3px rgba(167,139,250,0.6));';
         } else if (item.gemType && item.gemLevel != null) {
           _listImgSrc = './img/gems/gem_' + item.gemType + '_0' + item.gemLevel + '.png';
@@ -2208,93 +2680,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const globalSkBonus    = (data.stats && data.stats.skillLevelBonus)  || 0;
         const glyphChanceBonus = (data.stats && data.stats.glyphChanceBonus) || 0;
 
-        // ── Static game data from skills.md ──────────────────────────────────
-        const BRANCH_DEF = [
-          {
-            key: 'Blood & Bone',
-            match: 'Blood and Bone',
-            skills: [
-              {
-                raw: 'Witch Blood Lash', display: 'Blood Lash',
-                icon: 'img/skills/skill_blood_lash.png',
-                dmg:'Shadow', cost:'12 mana', scaling:'Magic · Vitality', tag:'Tether · Drain · Blood',
-                desc: 'Lash distant target and reel it in. Consecutive swings boost attack speed. Gain 4.9% MANA on hit.',
-                upgrades: [
-                  { name:'Blood Rage',  proto:'4790c83599850c24fb58bef8964894ed', max:4, levels:['Attack Speed boost lasts 5 seconds','Attack Speed boost lasts 10 seconds','Attack Speed boost lasts 15 seconds','Attack Speed boost lasts 20 seconds'] },
-                  { name:'Ichor',       proto:'6a52831d1e9610447a035afaa2e3801b', max:3, levels:['Wield 2 grappling tethers','Wield 3 grappling tethers','Wield 5 grappling tethers'] },
-                  { name:'Leech',       proto:'282ceefefe661bd4ab06b049da4f335f', max:3, levels:['Gain 1% Life from target on hit','Gain 2% Life from target on hit','Gain 3% Life from target on hit'] },
-                  { name:'Blood Glyph', proto:'8f8b9de71cb09c54b92cb261689ab66f', max:4, requires:'Evocation', glyphBonus:true, glyphBases:[12,20,28,36], levels:['12% chance of Blood Glyph on kill — Blood Glyphs apply a bleed when evoked','20% chance of Blood Glyph on kill — Blood Glyphs apply a bleed when evoked','28% chance of Blood Glyph on kill — Blood Glyphs apply a bleed when evoked','36% chance of Blood Glyph on kill — Blood Glyphs apply a bleed when evoked'] },
-                ],
-              },
-              {
-                raw: 'Witch Bone Storm', display: 'Bone Storm',
-                icon: 'img/skills/skill_bone_storm.png',
-                dmg:'Physical', cost:'25 mana', scaling:'Magic', tag:'AoE · Bone',
-                desc: 'Fire a rapid blast of bone shard missiles.',
-                upgrades: [
-                  { name:'Bone Glyph', proto:'443b10d8d3ec1c248b3758eefddd557a', max:4, glyphBonus:true, glyphBases:[20,33,40,45], levels:['20% chance of Bone Glyph on kill — Bone Glyphs apply a stun when evoked','33% chance of Bone Glyph on kill — Bone Glyphs apply a stun when evoked','40% chance of Bone Glyph on kill — Bone Glyphs apply a stun when evoked','45% chance of Bone Glyph on kill — Bone Glyphs apply a stun when evoked'] },
-                  { name:'Impel',  max:3, levels:['Applies a 200 strength knockback','Applies a 300 strength knockback','Applies a 400 strength knockback'] },
-                  { name:'Echo',   max:3, levels:['Reflecting shots ×2','Reflecting shots ×3','Reflecting shots ×4'] },
-                ],
-              },
-            ],
-          },
-          {
-            key: 'Glyph',
-            match: 'Witch Glyph',
-            skills: [
-              {
-                raw: 'Witch Glyph Lunge', display: 'Glyph Lunge',
-                icon: 'img/skills/skill_glyph_lunge.png',
-                dmg:'—', cost:'—', scaling:'150% weapon damage', tag:'Basic Attack · Evocation · Focusing · Melee',
-                requires:'Weapon',
-                desc: 'Lunges at a nearby target dealing 150% weapon damage and a 14% chance of generating a random Glyph. Three glyphs form a Spell — trigger Spells with Evocation skills.',
-                upgrades: [
-                  { name:'Reprise', max:3, levels:['40% chance an evoked Spell remains to be used again','60% chance an evoked Spell remains to be used again','80% chance an evoked Spell remains to be used again'] },
-                ],
-              },
-              {
-                raw: 'Witch Spine Breaker', display: 'Spine Breaker',
-                icon: 'img/skills/skill_spine_breaker.png',
-                dmg:'Physical', cost:'10 mana', scaling:'Magic', tag:'Projectile · Bone',
-                desc: 'Launches bone projectiles that shatter on impact, dealing physical damage.',
-                upgrades: [
-                  { name:'Shadow Glyph', proto:'3d215a015edeff4489a50df7975816e9', max:4, requires:'Evocation', levels:['30% chance of Shadow Glyph on kill — Shadow Glyphs return mana when evoked','50% chance of Shadow Glyph on kill — Shadow Glyphs return mana when evoked','70% chance of Shadow Glyph on kill — Shadow Glyphs return mana when evoked','80% chance of Shadow Glyph on kill — Shadow Glyphs return mana when evoked'] },
-                  { name:'Adept',        proto:'4c8493e66ebc14a4caae68081feeac98', max:3, levels:['Decrease Mana cost by 15%','Decrease Mana cost by 30%','Decrease Mana cost by 45%'] },
-                  { name:'Stun',         max:5, levels:['40% chance to Stun for 3 seconds','45% chance to Stun for 4.5 seconds','50% chance to Stun for 6 seconds','55% chance to Stun for 7.5 seconds','60% chance to Stun for 9 seconds'] },
-                  { name:'Umbra',        max:3, levels:['Trail of shadow lasting 3 seconds, dealing shadow damage to targets within','Trail of shadow lasting 6 seconds, dealing shadow damage to targets within','Trail of shadow lasting 9 seconds, dealing shadow damage to targets within'] },
-                ],
-              },
-            ],
-          },
-          {
-            key: 'Shadow',
-            match: 'Witch Shadow',
-            skills: [
-              {
-                raw: 'Witch Crows', display: 'Feast for Crows',
-                icon: 'img/skills/skill_feast_for_crows.png',
-                dmg:'Shadow', cost:'—', scaling:'—', tag:'Basic Attack · Melee · Shadow',
-                desc: 'On hit summons a Crow to your flock [Limit 5] for 20 seconds with a 5% chance of leaving a MANA ORB on release. Divebomb crows with STAND (Shift) or other FOCUSING skills.',
-                upgrades: [
-                  { name:'Flock',  max:2, levels:['Gather a flock up to 8 Crows','Gather a flock up to 11 Crows'] },
-                  { name:'Murder', proto:'9d3ac0c038c58034f8f217c54f70cef9', max:3, levels:['2% chance on hit to release a spiraling murder of Vicious Crow ×12','3% chance on hit to release a spiraling murder of Vicious Crow ×14','4% chance on hit to release a spiraling murder of Vicious Crow ×16'] },
-                ],
-              },
-              {
-                raw: 'Witch Shadow Walk', display: 'Shadow Walk',
-                icon: 'img/skills/skill_shadow_walk.png',
-                dmg:'Shadow', cost:'18 mana', scaling:'Magic', tag:'Teleport · Invulnerability · Shadow',
-                desc: 'Teleport to location where enemies within 2 meters are knocked back and Cursed. The curse lowers their defenses and returns health to the Witch when killed.',
-                upgrades: [
-                  { name:'Cypher',  max:3, requires:'Evocation', levels:['20% chance of a glyph on cursed kills','33% chance of a glyph on cursed kills','40% chance of a glyph on cursed kills'] },
-                  { name:'Expanse', max:2, levels:['Extend the area of effect to 5 meters','Extend the area of effect to 8 meters'] },
-                  { name:'Scourge', proto:'ce04da600ddc71d45aa161b1619b08e6', max:3, levels:['1× Scourge lasting 5 seconds — each stack lowers target\'s resistances','2× Scourge lasting 7 seconds — each stack lowers target\'s resistances','3× Scourge lasting 10 seconds — each stack lowers target\'s resistances'] },
-                ],
-              },
-            ],
-          },
-        ];
+        // ── Skill branch / upgrade definitions — edit skills.js, not here ────
+        const BRANCH_DEF = SKILLS_DEF;
 
         // Build quick lookup from raw skill name → save data
         const skByRaw = {};
@@ -2583,46 +2970,8 @@ document.addEventListener('DOMContentLoaded', () => {
       // ── Tattoo panel (rune garment slots) ─────────────────────────────────
       const tattoos = data.tattoos || [];
       if (tattoos.length > 0) {
-        // Rune number → image filename (supports both old rune_{name}.png and new rune0N_{name}.png)
+        // Rune image filenames and effect text sourced from RUNE_DATA in rune_recipes.js
         // Ash=1, Bat=2, Ka=3, Deb=4, Elm=5
-        const RUNE_NUM_IMAGE = { '1':'rune01_ash.png', '2':'rune02_bat.png', '3':'rune03_ka.png', '4':'rune04_deb.png', '5':'rune05_elm.png' };
-        const RUNE_NUM_IMAGE_OLD = { '1':'rune_ash.png', '2':'rune_bat.png', '3':'rune_ka.png', '4':'rune_deb.png', '5':'rune_elm.png' };
-        const RUNE_EFFECT_HINT = {
-          '1': 'Lightning shocks nearby enemies during your Glyph Lunge.',
-          '2': 'Blood Lash has a 50% chance to entangle enemies.',
-          '3': 'You are limited to 2 Crows, but they are eternal.',
-          '4': 'Your Spine Breaker follows an arcing path.',
-          '5': 'Your Bone Storm fires multiple missiles of blood rather than bone.',
-        };
-        // Rune socket-in-item effects, keyed by runeNum then slot-group label
-        const RUNE_SOCKET_EFFECTS = {
-          '1': [
-            { slots:'Weapon, Helm, Gloves',           effect:'+11 Attack' },
-            { slots:'Chest, Belt, Boots, Shield',     effect:'+11 Armor' },
-          ],
-          '2': [
-            { slots:'Weapon',                         effect:'25% chance to Bleed on hit' },
-            { slots:'Helm, Gloves',                   effect:'+20% Bleed Duration' },
-            { slots:'Chest, Shield',                  effect:'+25% Reduced Bleed Duration' },
-            { slots:'Belt, Boots',                    effect:'+0.2/s Life Regen' },
-          ],
-          '3': [
-            { slots:'Weapon',                         effect:'+13% Shadow Penetration' },
-            { slots:'Any armor piece',                effect:'+3% Magic Find' },
-          ],
-          '4': [
-            { slots:'Weapon',                         effect:'+13% Blunt Penetration' },
-            { slots:'Helm, Gloves',                   effect:'+20% Stun Duration' },
-            { slots:'Chest, Shield',                  effect:'+20% Reduced Stun Duration' },
-            { slots:'Belt, Boots',                    effect:'+5% Gold Find' },
-          ],
-          '5': [
-            { slots:'Weapon',                         effect:'+13% Slashing Penetration' },
-            { slots:'Helm, Gloves',                   effect:'+20% Bleed Duration' },
-            { slots:'Chest, Shield',                  effect:'+20% Reduced Bleed Duration' },
-            { slots:'Belt, Boots',                    effect:'+1 Stamina' },
-          ],
-        };
 
         const tattooBySlot = {};
         for (const t of tattoos) tattooBySlot[t.slot] = t;
@@ -2676,8 +3025,8 @@ document.addEventListener('DOMContentLoaded', () => {
           const rune     = tattooBySlot[slotName];
           const runeNum  = rune?.runeNum;
           const runeName = rune?.runeName;
-          const imgFileNew = runeNum ? RUNE_NUM_IMAGE[runeNum] : null;
-          const imgFileOld = runeNum ? RUNE_NUM_IMAGE_OLD[runeNum] : null;
+          const imgFileNew = runeNum ? RUNE_DATA.img[runeNum]        : null;
+          const imgFileOld = runeNum ? RUNE_DATA.img_legacy[runeNum] : null;
           const filled   = !!(runeName || rune?.runeTypeName);
 
           const pill = document.createElement('div');
@@ -2743,9 +3092,9 @@ document.addEventListener('DOMContentLoaded', () => {
             pill.addEventListener('mouseenter', e => {
               pill.style.filter = 'brightness(1.18)';
               pill.style.boxShadow = '0 2px 12px rgba(147,112,219,0.25)';
-              const tipTattooLine = runeNum && RUNE_EFFECT_HINT[runeNum]
+              const tipTattooLine = runeNum && RUNE_DATA.tattoo_effect[runeNum]
                 ? [{ text:'Tattoo effect:', color:'rgba(255,255,255,0.35)', _header:true },
-                   { text: RUNE_EFFECT_HINT[runeNum], color:'#a78bfa' }]
+                   { text: RUNE_DATA.tattoo_effect[runeNum], color:'#a78bfa' }]
                 : [];
               const tipData = Object.assign({}, rune, {
                 rarity: null,
@@ -2786,11 +3135,13 @@ document.addEventListener('DOMContentLoaded', () => {
       // ── Kill Log panel (below skills, 10 entries max, scrollable) ──────────
       if (hasKillLog) {
         const RARITY_KILL_COLORS = {
-          'Unique':    '#d4a84b',
-          'Champion':  '#c084fc',
-          'Boss':      '#f87171',
-          'Elite':     '#60a5fa',
-          'Normal':    '#9ca3af',
+          'Named':            '#fbbf24',
+          'Unique':           '#d4a84b',
+          'Boss':             '#f87171',
+          'Champion':         '#c084fc',
+          'Champion Minion':  '#a855f7',
+          'Elite':            '#60a5fa',
+          'Normal':           '#9ca3af',
         };
 
         const killWrap = document.createElement('div');
@@ -2821,7 +3172,7 @@ document.addEventListener('DOMContentLoaded', () => {
           let _killSortCol = 'count'; // 'name' | 'rarity' | 'count'
           let _killSortDir = -1;      // -1 = desc, 1 = asc
 
-          const RARITY_ORDER = { Unique:0, Boss:1, Champion:2, Elite:3, Normal:4 };
+          const RARITY_ORDER = { Named:0, Unique:1, Boss:2, Champion:3, 'Champion Minion':4, Elite:5, Normal:6 };
 
           function sortedKillLog() {
             return [...killLog].sort((a, b) => {
@@ -2834,7 +3185,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 cmp = (a.count||0) - (b.count||0);
               }
               return cmp * _killSortDir;
-            }).slice(0, 50);
+            });
           }
 
           // Column header row
@@ -2867,17 +3218,19 @@ document.addEventListener('DOMContentLoaded', () => {
             return span;
           }
 
+          tblHdr.style.cssText = 'display:grid;grid-template-columns:1fr 130px 56px;width:100%;box-sizing:border-box;';
           tblHdr.appendChild(makeSortHdr('Monster', 'name', 'left'));
           tblHdr.appendChild(makeSortHdr('Rarity',  'rarity', 'left'));
           tblHdr.appendChild(makeSortHdr('Count',   'count', 'right'));
           killBody.appendChild(tblHdr);
 
-          // Scrollable body
+          // Scrollable body — no row cap, scrollable container
           const ROW_H = 26;
-          const MAX_VISIBLE = 10;
+          const MAX_VISIBLE = 12;
           const tblBody = document.createElement('div');
           tblBody.className = 'dh-kill-tbl-body';
           tblBody.style.maxHeight = (ROW_H * MAX_VISIBLE) + 'px';
+          tblBody.style.overflowY = 'auto';
 
           function rebuildRows() {
             tblBody.innerHTML = '';
@@ -2887,10 +3240,11 @@ document.addEventListener('DOMContentLoaded', () => {
               const row = document.createElement('div');
               const isLast = idx === entries.length - 1;
               row.className = 'dh-kill-row' + (isLast ? ' dh-kill-row--last' : '');
+              row.style.cssText = 'display:grid;grid-template-columns:1fr 130px 56px;width:100%;box-sizing:border-box;';
               row.innerHTML =
-                '<span class="dh-kill-name">' + esc(entry.name) + '</span>' +
-                '<span class="dh-kill-rarity" style="color:' + rc + ';">' + esc(entry.rarity || '–') + '</span>' +
-                '<span class="dh-kill-count">' + entry.count.toLocaleString() + '</span>';
+                '<span class="dh-kill-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">' + esc(entry.name) + '</span>' +
+                '<span class="dh-kill-rarity" style="color:' + rc + ';white-space:nowrap;">' + esc(entry.rarity || '–') + '</span>' +
+                '<span class="dh-kill-count" style="white-space:nowrap;">' + entry.count.toLocaleString() + '</span>';
               row.addEventListener('mouseenter', () => row.style.background = 'rgba(255,255,255,0.035)');
               row.addEventListener('mouseleave', () => row.style.background = '');
               tblBody.appendChild(row);

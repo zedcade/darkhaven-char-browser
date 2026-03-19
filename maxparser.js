@@ -4,105 +4,13 @@
 // Class is detected by matching units[0].blueprint against blueprints array,
 // or falling back to skill branch GUIDs. Base stats (including dexterity)
 // come from here — they are NOT stored directly in the save file.
-// ---------------------------------------------------------------------------
-const CLASS_CONFIG = {
-  Witch:        { blueprints: ['b14a45f43b3c7a740909d3601389b966'],
-                  branches:   ['98d71cb016bc09c4299218b103d51941','86f24eb25dd7cae44a2065e622727df5','8adfe3bf7439a9341831c5fa90e81a67'],
-                  baseStats:  { strength:20, dexterity:30, magic:30, vitality:25, attack:20, healthMax:5, manaMax:10 } },
-  Crusader:     { blueprints: [],
-                  branches:   [],
-                  baseStats:  { strength:30, dexterity:20, magic:15, vitality:25, attack:30, healthMax:20, manaMax:0 } },
-  Hunter:       { blueprints: [],
-                  branches:   [],
-                  baseStats:  { strength:25, dexterity:30, magic:15, vitality:20, attack:30, healthMax:10, manaMax:5 } },
-  Technomancer: { blueprints: [],
-                  branches:   [],
-                  baseStats:  { strength:15, dexterity:25, magic:20, vitality:30, attack:25, healthMax:15, manaMax:10 } },
-};
+// CLASS_CONFIG provided by gamedata.js
 
 // ---------------------------------------------------------------------------
 // STAT GUIDs
-// ---------------------------------------------------------------------------
-const STAT_GUIDS = {
-  PROPERNAME:        'b00f3f85f9ff6674d933093f1689bd9d',
-  RARE_NAME:         '528fde312ad42d949a4847aa7ecc794b',
-  LEVEL:             '58f688979805ad9448dd76c47394f635',
-  EXPERIENCE:        '9509ba7b24ce0f844a22044dbc6e9a02',
-  EXPERIENCE_NEXT:   'deba83f3d94a6e74faff8758c91df000',
-  GOLD:              'e098506db56ab944794ce132ced2ea51',
-  STONE:             'e2fca4e0f5f710446a6e4b44bd62a543',
-  FLASK:             '446ee239b53115146a9e009f93f66ed5',
-  FREE_FLASK:        '4af3c8c45eb30ab43b44505e4269fe8c',
-  COMPOSITION:       '0b79b14976142af4a82d47d671f8172a',
-  STRENGTH_BASE:     '6af4197f9df6cec4da7a18c6550d8696',
-  DEXTERITY_BASE:    '6c31e84f2c7080440adeda7dec6abb56',
-  MAGIC_BASE:        'a30b17b90d023f9449fce3c7735c2be9',
-  VITALITY_BASE:     '6fe46d231b86bbe4e9cd3459c27f49ba',
-  ATTACK_BASE:       '367bb8e76ee8a504a9c9eb76e1113e71',
-  HEALTH:            'a12ff07e0f2eb2c458c46d895b3e984f',
-  HEALTH_BASE:       'd935659c0a572ad4f91b0eb5149d899e',
-  MANA:              'a1a41762eced5bf4eb07e65cb7fbed7e',
-  MANA_BASE:         'e9910e346fbe25b459be261da9edc8ba',
-  STAMINA:           'b952e7d961c1ee44fb4942edfe7f1f62',
-  STAMINA_REGEN:     '851b7e40a03cdd544b983815849e7284',
-  KILL_COUNTER:      'a3ecebb06794f564496a2e590a885145',
-  KILLED_BY:         '64d4a87359cf9b94c9a496f0fec0880e',
-  QUALITY:           '4a9f733126bc51442aa34b4a1c19bf63',
-  ARMOR_BASE:        'ae186ac8917738a4d8272dca68d1f11c',
-  IDENTIFIED:        'c86d0c41819c87f468f07dfb4f9df799',
-  SOCKETS:           'b5a15f51cf6e00f4d924f5fec4a77a81',
-  DMG_BASE_MIN:      'bebbd894bd559054f9dadcce9d78799a',
-  DMG_BASE_MAX:      '0346077fcd461a54ba2b3dff55c0eb26',
-  DMG_TYPE:          '9f9c320d8621b1047a69df8473d712c9',
-  QUANTITY:          'ff480aacdcf23da4fb7f4216650961ab',
-  EQUIP_ASPECT:      '4dccf3c1179ea3e4fb57240b3727d777',
-  ITEM_MARK:         '5e8c72abf6d0350419aa7060edf20843',
-  ITEM_PROG_REQ:     '5597d3540a0445f4eb67aa1ef5016dfb', // attr tome tier (long=1→I, 2→II)
-  SKILL_TOME_REQ:    '92f5b0b797fcb204c8d048860eefb9e3', // skill tome tier (long=1→I, 2→II)
-  STAT_REQ_BASE:     '0dc8cc7fc99c9734ca589b1ac7cd2d81', // attribute requirement value
-  ATTACK:            '57d40243ca69cdc4293ab75783630ea9',
-  EQUIP_ARMOR_BONUS: '0a44e6405a78a754390879f7dc500bf2',
-  EQUIP_ARMOR_PCT:   'e3e0fd5ff5f469e43bdc2de52678b9c6',
-  SKILL_BRANCH:      'be5801ab1de1c754e875c80e4cdc5260',
-  // Detailed stats
-  RESISTANCE:        'fe9add0c2727d3c409ec60640cd420f0',
-  PENETRATION:       'fce128493e8e2e8498616d6c73c35556',
-  CRIT_CHANCE:       'f1888e2481817cf4cb0f2e000974df58',
-  ATTACK_SPEED_MULT: '72a9c1d23b5aaa64bab15c8c5b7128fb',  // multiplier e.g. 0.20 = +20%
-  CAST_SPEED_MULT:   'ffa90dc178405304c9adcc1fec04bf36',  // e.g. 0.14 = +14%
-  CRIT_RESISTANCE:   '2422fdf6009941846aefa30e599d1254',
-  MOVE_SPEED:        'b4f373c86515b1c4c8389c944ecb579b',
-  WATER_WALKING:     '0e18262ae2504484c83a8feed23fd016',
-  MAGIC_FIND:        '41edf57e3ff5689449a522ff28d4cf0a',
-  GOLD_FIND:         '7dc4f108eb38fb44196ffd73a9f573ac',
-  ITEM_FIND:         '29ced5a857c129d4298c238cfade2de2',
-  EQUIP_CRIT_CHANCE: '8835ea40499ac5c45a949ccce7cd1be5',
-  STAMINA_MAX:       'b8f43645839918c4b9328c71c5913577',
-  STAMINA_BASE:      'c08bf0311c3d70842b17980f9518887a',
-  // Additional affix stats
-  STRENGTH_BONUS:    '90ca4ade65d73094084afb2524dd18bc',
-  DEXTERITY_BONUS:   '8c6f382fc62e7a54abd32f04f6e67720',
-  VITALITY_BONUS:    '646f85f5ebfa69947b558bdbd96c1331',
-  HEALTH_BONUS:      '15261ada67c566a41ba01af15881152f',
-  MANA_MAX_BONUS:    '7b8688dfc705e5a4795434a96f5faf88',
-  MANA_REGEN:        '8834f016bd6cc3547b3a540212a96a47',
-  FEATHER_FALLING:   '08085d1e3fcea624481f889ef6bf8329',
-  MAGIC_BONUS:       'c76898bb84052c34c8a67bc3d0005878',
-  MANA_ITEM_BONUS:   'de2fbbe8f89763b438b6eb80dce68361',
-  CORE_SOURCE:       '67076e158ac595f45bc47c336b436b7d',  // unitblueprint = monster that dropped the heart
-  // Per-attribute intrinsic bonuses (from consumable Tomes)
-  STR_INTRINSIC:     '9611aa13f24c978439ddd12e3d984000',
-  DEX_INTRINSIC:     '2ad1e03444d0a1a49bc5438d073cfa3b',
-  VIT_INTRINSIC:     'fbc8a101f047da24abaeb498ad22343c',
-  MAG_INTRINSIC:     '38f897fd5d349c743b8f7a213b9072da',
-};
+// STAT_GUIDS provided by gamedata.js
 
-// ITEM_FIND sub-type prototype GUIDs
-const ITEM_FIND_TYPES = {
-  GEM:        'a0a483f116687984d987f66fb3bcb0af',
-  HEALTH_ORB: 'cc413285852203b41b340769e8394c5d',
-  MANA_ORB:   '76e6acaf15611074880f0383a1517cd2',
-};
+// ITEM_FIND_TYPES provided by gamedata.js
 
 // Kill log display name overrides — keyed by DH_GUIDS name string.
 // Each mob has multiple variant GUIDs so we key by name rather than GUID.
@@ -118,6 +26,7 @@ const _MOB_DISPLAY_NAMES = {
   'Skeleton Shadow Mage Unique Unit':      'Council of Five',
   'Unique Bramblehusk Unit':               'Old Granddad',
   'Unique Deep Ones Unit':                 'Riptide Horror',
+  'Leviathan Unique Unit':                 'Leviathan',
 };
 
 // Heart source monster BA name → base display name (prefix added based on blueprint rarity)
@@ -143,6 +52,7 @@ const _HEART_NAMES_MAP = {
   'Skeleton Shadow Mage Unique Unit':    'Council of Five',
   'Unique Bramblehusk Unit':             'Old Granddad',
   'Unique Deep Ones Unit':               'Riptide Horror',
+  'Leviathan Unique Unit':               'Leviathan',
 };
 
 // Unique heart drop monsters — these hearts use the core_unique_{element}_heart.png image convention
@@ -191,25 +101,9 @@ function resolveHeartInfo(srcBpName, heartBpName) {
   return { name, rarity, element, isUniqueSocket };
 }
 
-// Damage type prototype GUIDs → short key (alphabetical order for display)
-const ALL_DAMAGE_TYPE_GUID = '99f2b799d71d7cb4ca4161e44224e4af';
-const EL_KEYS_ALL = ['blunt','cold','fire','lightning','shadow','slashing'];
-const DAMAGE_TYPE_GUIDS = {
-  'bbe7b9d922575f5469ca80b9eeac9f02': 'blunt',
-  'db1b573480f3568429f4dc8c70afeb7d': 'cold',
-  '49c26b4693bceee48bb7695e3d6e6d76': 'fire',
-  '59c4f390c4bfa4a4fa40dd370bb62244': 'lightning',
-  '0d001a391d58dc34f99e415549444f66': 'shadow',
-  '1952544644d9fad4993fe76109f43381': 'slashing',
-};
+// DAMAGE_TYPE_GUIDS provided by gamedata.js
 
-const CONTAINERS = {
-  EQUIPMENT:     '0b50d10714d6c0c4bb7f5447dfb5a745',
-  ALT_EQUIPMENT: '1d936ddad6b2af4418e3d46a2bc946ee',
-  AFFIXES:       '864d7327e29b7464694ce0baf5bed2fd',
-  BONUS_STATS:   '688a379c1b446ea40a944279e04382e8',
-  STASH:         '3cc00cfe933e46344879c0f506594096',
-};
+// CONTAINERS provided by gamedata.js
 
 // Infer equipment slot from material/blueprint name (for stash items without explicit slot)
 function inferSlotFromName(name) {
@@ -231,27 +125,11 @@ function inferSlotFromName(name) {
   return null;
 }
 
-// Equipment slot index
-const SLOT_INDEX_TO_KEY = {
-  0:'hand_right', 1:'hand_left', 2:'chest', 3:'feet', 4:'head',
-  5:'neck', 6:'finger_1', 7:'finger_2', 8:'hands', 9:'waist',
-  10:'flask', 11:'hand_right_alt', 12:'hand_left_alt', 13:'hand_extra_alt', 14:'hand_extra_off'
-};
+// SLOT_INDEX_TO_KEY provided by gamedata.js
 
-const SLOT_DISPLAY = {
-  hand_right:'Main Hand', hand_left:'Off Hand', chest:'Chest', feet:'Boots',
-  head:'Helm', neck:'Amulet', finger_1:'Ring 1', finger_2:'Ring 2',
-  hands:'Gloves', waist:'Belt', flask:'Flask',
-  hand_right_alt:'Alt Main Hand 1', hand_left_alt:'Alt Off Hand 1',
-  hand_extra_alt:'Alt Main Hand 2', hand_extra_off:'Alt Off Hand 2',
-};
+// SLOT_DISPLAY provided by gamedata.js
 
-// Tattoo (rune garment) slot indices in EQUIPMENT container
-const TATTOO_SLOT_INDEX = {
-  15:'Crown', 16:'Heart', 17:'Core', 18:'Back', 19:'Sacra',
-  20:'Right Shoulder', 21:'Left Shoulder', 22:'Right Arm', 23:'Left Arm',
-  24:'Right Thigh',    25:'Left Thigh',    26:'Right Calf',27:'Left Calf'
-};
+// TATTOO_SLOT_INDEX provided by gamedata.js
 // ---------------------------------------------------------------------------
 // GUID dictionaries (DH_GUIDS) defined in maxguids.js — load it before this file.
 // QUALITY_GUIDS and LEGENDARY_AFFIX_NAMES are derived from DH_GUIDS at startup:
@@ -769,7 +647,7 @@ function processCharacterData(data, digest) {
           // Per-mob kill entry — use explicit display name map first, then DH_GUIDS lookup
           const _dhName = DH_GUIDS[kbp] || '';
           let ename = _MOB_DISPLAY_NAMES[_dhName] || resolveGuid(kbp);
-          if (!ename) ename = kbp.slice(0, 8) + '…';
+          if (!ename) ename = kbp;  // full GUID fallback (unknown mob)
           // Resolve rarity from p1.prototype name
           // Rarity: first check p1 prototype name, then fall back to mob name
           const rraw = rProto ? (DH_GUIDS[rProto] || '') : '';
@@ -777,12 +655,24 @@ function processCharacterData(data, digest) {
           const mobraw = DH_GUIDS[kbp] || '';
           let erarity = null;
           const raritySource = rraw + ' ' + mobraw + ' ' + ename;
-          if      (raritySource.includes('Unique'))    erarity = 'Unique';
-          else if (raritySource.includes('Champion'))  erarity = 'Champion';
-          else if (raritySource.includes('Boss'))      erarity = 'Boss';
-          else if (raritySource.includes('Elite'))     erarity = 'Elite';
-          else                                         erarity = 'Normal';
-          charData.killLog.push({ blueprint: kbp, name: ename, rarity: erarity, count: S });
+          // Named must be checked first (3ecc4f = fixed world/named encounters)
+          // Champion Minion must be checked before Champion (substring match order)
+          if      (raritySource.includes('Named'))           erarity = 'Named';
+          else if (raritySource.includes('Unique'))          erarity = 'Unique';
+          else if (raritySource.includes('Boss'))            erarity = 'Boss';
+          else if (raritySource.includes('Champion Minion')) erarity = 'Champion Minion';
+          else if (raritySource.includes('Champion'))        erarity = 'Champion';
+          else if (raritySource.includes('Elite'))           erarity = 'Elite';
+          else                                               erarity = 'Normal';
+          // Strip leading rarity word from display name — rarity column already shows it.
+          // e.g. 'Champion Gulpjaw' → 'Gulpjaw', 'Elite Seafang' → 'Seafang'
+          let ekillname = ename;
+          ekillname = ekillname.replace(/^Champion Minion\s+/i, '').replace(/^Champion\s+/i, '')
+                                .replace(/^Elite\s+/i, '').replace(/^Unique\s+/i, '')
+                                .replace(/^Boss\s+/i, '');
+          // Champion Minion: append ' Minion' suffix to the stripped base name
+          if (erarity === 'Champion Minion') ekillname = ekillname.replace(/\s*Minion\s*$/i,'') + ' Minion';
+          charData.killLog.push({ blueprint: kbp, name: ekillname, rarity: erarity, count: S });
         }
         break;
       }
@@ -1211,10 +1101,20 @@ function processCharacterData(data, digest) {
     // Affix lines — havenforge-exact rendering
     const lines = buildAffixLines(unit);
     if (isBonusStat) {
-      // Mark lines from socketed items with their type for bullet icon in tooltip
-      const bpName = DH_GUIDS[unit.blueprint||''] || '';
-      const sockT  = /core/i.test(bpName) ? 'heart' : /rune/i.test(bpName) ? 'rune' : 'gem';
-      for (const ln of lines) { ln.socketed = true; ln.sockType = sockT; parent.affixLines.push(ln); }
+      // Mark lines from socketed items with type + extra info for bullet colour in tooltip.
+      // parent.socketed was just populated above in the same loop iteration — last entry is this unit.
+      const bpName   = DH_GUIDS[unit.blueprint||''] || '';
+      const sockT    = /core/i.test(bpName) ? 'heart' : /rune/i.test(bpName) ? 'rune' : 'gem';
+      const _lastSock = parent.socketed && parent.socketed[parent.socketed.length - 1];
+      for (const ln of lines) {
+        ln.socketed = true;
+        ln.sockType = sockT;
+        if (_lastSock) {
+          ln.heartRarity = _lastSock.heartRarity; // e.g. 'Common','Elite','Champion','Unique'
+          ln.gemName     = _lastSock.name;         // e.g. 'Cracked Ruby', 'Dull Jade'
+        }
+        parent.affixLines.push(ln);
+      }
     } else {
       // Flask affix units carry no stat values — their blueprint name IS the property
       // e.g. "War (Flask) Affix Unit" → show "War" as an affix line

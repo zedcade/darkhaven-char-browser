@@ -8021,7 +8021,12 @@ const DH_GUIDS = {
         "ffc8fbd3b912ac7eabc7e862778268cd": "Witch Crows Skill Unit",
         "ffc8fbd3b912ac7edec9acbcb8f3ebb8": "Witch Crows Skill Unit",
         "ffec0da60c1dd42449d8bf268fdc4f7f": "Staff Common Stats",
-        "fff2b93bb321ece4ea9025ebc97a00f0": "Map Rotate Left Input Action"
+        "fff2b93bb321ece4ea9025ebc97a00f0": "Map Rotate Left Input Action",
+
+        "064da5f0cd749354290362b23d337386": "Zhark Unit",
+        "5276244482e51ef40951cf89ba3566ab": "Leviathan Unique Unit",
+        "7ac1e91696ae73349a8fb306ed34f766": "Seafang Unit",
+        "3ecc4f6eb4d55d04186b6fb6d94db2c3": "Monster Quality -1 (Named)"
     };
 
 

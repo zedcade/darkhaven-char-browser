@@ -267,19 +267,26 @@
   .tip-sock-badge--gold { border:2px solid #d4a847; box-shadow:0 0 5px #c9a84c99; color:#c9a84c; }
   .tip-subtitle { font-size:.72rem; margin-bottom:4px; }
   .tip-divider  { border-top:1px solid rgba(255,255,255,.08); margin:6px 0 4px; }
-  .tip-dmg-row  { display:flex; align-items:center; gap:5px; font-size:.8rem; margin-bottom:2px; }
+  .tip-dmg-row  { display:flex; align-items:center; gap:5px; font-size:.8rem; margin-top:auto; margin-bottom:2px; }
   .tip-dmg-icon { color:rgba(255,255,255,.3); }
   .tip-dmg-val  { font-weight:700; }
   .tip-dmg-elem { font-size:.7rem; margin-left:2px; }
-  .tip-armor-row { display:flex; align-items:center; gap:5px; font-size:.8rem; margin-bottom:2px; color:#8ab4f8; }
+  .tip-armor-row { display:flex; align-items:center; gap:5px; font-size:.8rem; margin-top:auto; margin-bottom:2px; color:#8ab4f8; }
   .tip-armor-val { font-weight:600; }
-  .tip-dye-row  { display:flex; align-items:center; gap:6px; font-size:.72rem; margin-top:4px; padding-top:4px; border-top:1px solid rgba(255,255,255,.06); }
+  .tip-dye-row  { display:flex; align-items:center; gap:6px; font-size:.72rem; margin-top:4px; }
   .tip-dye-name { color:#aaa; }
   .tip-dye-chips { display:flex; gap:3px; flex-wrap:wrap; }
   .tip-dye-chip  { display:inline-block; width:12px; height:12px; border-radius:2px; border:1px solid rgba(255,255,255,.15); }
   .tip-affix-header { font-size:.65rem; margin-top:3px; font-style:italic; }
-  .tip-affix-row { display:flex; align-items:baseline; gap:4px; font-size:.76rem; line-height:1.4; }
-  .tip-bullet    { flex-shrink:0; font-size:.7rem; }
+  .tip-affix-row        { display:flex; align-items:center; gap:4px; font-size:.76rem; line-height:1.4; }
+  /* Bullet spans are empty — character and colour come entirely from CSS.
+     To change any bullet: edit content / color here only, no JS changes needed. */
+  .tip-bullet           { flex-shrink:0; width:1em; text-align:center; font-size:.62rem; line-height:1; }
+  .tip-bullet::before   { display:block; }
+  .tip-bullet--regular::before { content:'◆'; color:#ffffff; }
+  .tip-bullet--gem::before     { content:'♦'; /* color set inline from gemColor() */ }
+  .tip-bullet--heart::before   { content:'♥'; /* color set inline from HEART_RARITY_COLORS_TIP */ }
+  .tip-bullet--rune::before    { content:'★'; color:#a78bfa; }
   .tip-affix-val { font-weight:700; }
 
   /* ── Character cards in file list ──────────────────────────── */
@@ -547,8 +554,11 @@
     max-width:960px; width:100%;
     background:rgba(255,255,255,.015); border:1px solid rgba(201,168,76,.18);
     border-radius:10px; box-sizing:border-box; overflow:hidden;
+  }
+  .dh-last-panel {
     margin-bottom:2.5rem;
   }
+
   .dh-leg-hdr {
     display:flex; align-items:center; gap:.75rem;
     padding:8px 16px 6px;
@@ -699,12 +709,12 @@
 
 
   /* ── Tooltip image wrapper ───────────────────────────────────── */
-  .tip-img-wrap    { display:flex; align-items:flex-start; gap:10px; margin-bottom:2px; }
-  .tip-img-content { flex:1; min-width:0; }
+  .tip-img-wrap    { display:flex; align-items:stretch; gap:10px; margin-bottom:0; }
+  .tip-img-content { flex:1; min-width:0; display:flex; flex-direction:column; }
   /* Tooltip image size tiers */
-  .tip-img--sm  { width:36px;  height:36px;  object-fit:contain; display:block; flex-shrink:0; }
-  .tip-img--md  { width:48px;  height:48px;  object-fit:contain; display:block; flex-shrink:0; border-radius:4px; }
-  .tip-img--lg  { max-height:88px; max-width:88px; object-fit:contain; display:block; flex-shrink:0; border-radius:4px; }
+  .tip-img--sm  { width:36px;  height:36px;  object-fit:contain; display:block; flex-shrink:0; align-self:flex-start; }
+  .tip-img--md  { width:48px;  height:48px;  object-fit:contain; display:block; flex-shrink:0; border-radius:4px; align-self:flex-start; }
+  .tip-img--lg  { width:72px; height:auto; max-height:140px; object-fit:contain; display:block; flex-shrink:0; border-radius:4px; align-self:flex-start; }
   .tip-highlight   { color:#ccc; }
 
   /* ── Stat tooltip ────────────────────────────────────────────── */
@@ -829,6 +839,15 @@
   .dh-reset-btn     { flex-shrink:0; background:rgba(255,60,60,0.12); border:1px solid rgba(255,80,80,0.25); border-radius:3px; color:rgba(255,100,100,0.7); font-size:0.55rem; padding:2px 5px; cursor:pointer; transition:all 0.12s; white-space:nowrap; }
   .dh-reset-btn:hover { background:rgba(255,60,60,0.25); color:#f87171; }
   .dh-hidden        { display:none; }
+
+  /* ── Inline path confirm prompt ─────────────────────────────────────── */
+  .dh-path-prompt         { margin-top:5px; padding:5px 4px; background:rgba(168,85,247,0.08); border:1px solid rgba(168,85,247,0.2); border-radius:4px; }
+  .dh-path-prompt-label   { font-size:0.55rem; color:#a78bfa; margin-bottom:3px; }
+  .dh-path-prompt-row     { display:flex; gap:4px; align-items:center; }
+  .dh-path-prompt-input   { flex:1; font-size:0.55rem; background:#1a1a2e; border:1px solid rgba(168,85,247,0.3); border-radius:3px; color:#c4b5fd; padding:3px 5px; outline:none; min-width:0; }
+  .dh-path-prompt-input:focus { border-color:#a855f7; }
+  .dh-path-prompt-ok      { flex-shrink:0; background:rgba(168,85,247,0.2); border:1px solid rgba(168,85,247,0.4); border-radius:3px; color:#c4b5fd; font-size:0.65rem; padding:2px 6px; cursor:pointer; transition:all 0.12s; }
+  .dh-path-prompt-ok:hover { background:rgba(168,85,247,0.35); color:#fff; }
   .dh-footer-links  { display:flex; gap:.5rem; align-items:center; white-space:nowrap; flex-shrink:0; }
   .dh-footer-link   { color:#555; text-decoration:none; transition:color .15s; }
   .dh-footer-link-gh { display:inline-flex; align-items:center; gap:4px; color:#555; text-decoration:none; transition:color .15s; }
