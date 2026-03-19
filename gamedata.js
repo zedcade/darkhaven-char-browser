@@ -197,11 +197,30 @@ const HEART_NAMES_MAP = {
   'Bogie Feral Unit':                    'Bogie Feral',
   'Bogie Spearman Unit':                 'Bogie Spearman',
   'Doomed Soldier 2H Spear Unit':        'Doomed Soldier',
+  'Doomed Soldier Unit':                 'Doomed Soldier',
+  'Doomed Soldier 0H Blunt Unit':        'Doomed Soldier',
+  'Doomed Soldier 1H Blunt Unit':        'Doomed Soldier',
+  'Doomed Soldier 1H Slashing Unit':     'Doomed Soldier',
+  'Doomed Soldier 2H Blunt Unit':        'Doomed Soldier',
+  'Doomed Soldier 2H Slashing Unit':     'Doomed Soldier',
+  'Deep Ones Unit':                      'Riverfang',
   'Giant Blight Roach Unit':             'Giant Blight Roach',
   'Gloom Parasite Unit':                 'Gloom Parasite',
   'Gulpjaw Unit':                        'Gulpjaw',
   'Skeleton Frost Mage Unit':            'Skeleton Frost Mage',
-  'Tunnel Thug Unit':                    'Tunnel Thug',
+  // Tunnel Thug Unit is the internal blueprint for Babanikku (named unique encounter)
+  'Tunnel Thug Unit':                    'Babanikku',
+  // Named champion encounters — fallback would give "Champion X", which is wrong
+  'Champion Burial Knight Unit':         'Esclados the Turncoat',
+  'Champion Baragon Unit':               'Arb the Enslaver',  // internal blueprint for the Arb the Enslaver encounter
+  'Champion Gulpjaw Unit':               'Sizzle Bough',       // internal blueprint for the Sizzle Bough encounter
+  'Melee Swamp Husk Champion Unit':      'Sizzle Bough',
+  // Bone Legion variants all map to the same display name
+  'Bone Legion 1H Blunt Unit':           'Bone Legion',
+  'Bone Legion 1H Slashing Unit':        'Bone Legion',
+  'Bone Legion 2H Blunt Unit':           'Bone Legion',
+  'Bone Legion 2H Slashing Unit':        'Bone Legion',
+  'Bone Legion 2H Spear Unit':           'Bone Legion',
   // Unique bosses
   'Barrow Knight 1H Slashing Unique Unit': 'Disgraced Paladin',
   'Bogie Feral Unique Unit':             'Rokkudokin',
@@ -221,13 +240,16 @@ const HEART_NAMES_MAP = {
 const UNIQUE_HEART_MONSTERS = new Set([
   'Barrow Knight 1H Slashing Unique Unit',  // Disgraced Paladin
   'Bogie Feral Unique Unit',                // Rokkudokin
+  'Champion Baragon Unit',                  // Arb the Enslaver (Champion Baragon Unit blueprint, drops Unique Lightning heart)
+  'Gloom Parasite Unit',                    // Gloom Parasite
   'Gulpjaw Unique Unit',                    // Blubberjaw
+  'Leviathan Unique Unit',                  // Leviathan
   'Melee Swamp Husk Unique Unit',           // Char Root
   'Mega Gazer Unit',                        // Goke the Intruder
   'Necropolis Lich Boss Unit',              // Narlathak
   'Skeleton Shadow Mage Unique Unit',       // Council of Five
   'Unique Bramblehusk Unit',                // Old Granddad
-  'Gloom Parasite Unit',                    // Gloom Parasite
+  'Tunnel Thug Unit',                       // Babanikku (named unique encounter)
   'Unique Deep Ones Unit',                  // Riptide Horror
 ]);
 

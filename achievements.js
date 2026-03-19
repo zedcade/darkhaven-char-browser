@@ -49,11 +49,70 @@
 //   s.deathsMax      {number}  highest death count on any single char
 //   s.deathFree      {boolean} any char reached level 20 with 0 deaths
 //   s.hoarder        {boolean} any legendary found ≥3 times
+//   s.heartsFound    {object}  "sourceName|Rarity" → bool, true if collected
+//   s.heartsDone     {number}  count of collected source×rarity pairs
+//   s.heartTotal     {number}  HEART_TOTAL
 //   s.gemsInStash    {Set}     gem types ('amber','jade',...) seen in stash
 //   s.heartsInStash  {Set}     heart elements ('fire','cold','lightning','nature','shadow') seen in stash/sockets
+//   s.mfMax          {number}  highest magic find % on any single char
+//   s.usedTomes      {Set}     tome keys consumed: 'vigor_1','vigor_2','might_1','might_2','agility_1','agility_2','power_1','power_2'
+//   s.heartsFound    {object}  "sourceName|Rarity" → bool, true if collected
+//   s.heartsDone     {number}  count of (source × rarity) pairs found
+//   s.heartTotal     {number}  HEART_TOTAL
+//   s.mfMax          {number}  highest magic find % on any single char
+//   s.usedTomes      {Set}     tome keys consumed ('vigor_1','vigor_2','might_1','might_2',...)
 //
 // Last updated: patch 0.0.23609 (2026-03-19)
 // ---------------------------------------------------------------------------
+
+// ── Heart catalogue ──────────────────────────────────────────────────────────
+// Each entry = one source mob with the heart rarities it actually drops.
+// Verified against in-game save data (patch 0.0.23609+).
+//
+// 'source' must match heartSourceName from maxparser.js (_HEART_NAMES_MAP,
+// or the auto-fallback which strips "Unit" / "Unique" suffixes).
+const HEART_CATALOGUE = [
+  // ── Regular mobs — Common / Elite / Champion ───────────────────────────────
+  { source:'Blight Roach',         rarities:['Common','Elite','Champion'] },
+  { source:'Bogie Bomb Thrower',   rarities:['Common','Elite','Champion'] },
+  { source:'Bogie Chopper',        rarities:['Common','Elite','Champion'] },
+  { source:'Bogie Feral',          rarities:['Common','Elite','Champion'] },
+  { source:'Bogie Spearman',       rarities:['Common','Elite','Champion'] },
+  { source:'Bogie Tyrant',         rarities:['Common','Elite','Champion'] },
+  { source:'Bone Legion',          rarities:['Common','Elite','Champion'] },
+  { source:'Doomed Soldier',       rarities:['Common','Elite','Champion'] },
+  { source:'Gazer',                rarities:['Common','Elite','Champion'] },
+  { source:'Giant Blight Roach',   rarities:['Common','Elite','Champion'] },
+  { source:'Gulpjaw',              rarities:['Common','Elite','Champion'] },
+  { source:'Riverfang',            rarities:['Common','Elite','Champion'] },
+  { source:'Seafang',              rarities:['Common','Elite','Champion'] },
+  { source:'Skeleton Frost Mage',  rarities:['Common','Elite','Champion'] },
+  { source:'Skeleton Shadow Mage', rarities:['Common','Elite','Champion'] },
+  { source:'Zhark',                rarities:['Common','Elite','Champion'] },
+  // ── Named champions — Champion-grade hearts only ───────────────────────────
+  // Babanikku — named unique encounter using the Tunnel Thug Unit blueprint
+  { source:'Babanikku',             rarities:['Unique']   },
+  // Warren Chief (Bogie Tyrant Unique) drops Champion Fire — confirmed via save
+  { source:'Warren Chief',          rarities:['Champion'] },
+  // Esclados the Turncoat = Champion Burial Knight — drops Champion Shadow
+  { source:'Esclados the Turncoat', rarities:['Champion'] },
+  // Sizzle Bough — internal blueprint is Champion Gulpjaw Unit
+  { source:'Sizzle Bough',          rarities:['Champion'] },
+  // ── Unique bosses ──────────────────────────────────────────────────────────
+  { source:'Disgraced Paladin',    rarities:['Unique'] },
+  { source:'Rokkudokin',           rarities:['Unique'] },
+  { source:'Blubberjaw',           rarities:['Unique'] },
+  { source:'Char Root',            rarities:['Unique'] },
+  { source:'Goke the Intruder',    rarities:['Unique'] },
+  { source:'Arb the Enslaver',     rarities:['Unique'] },
+  { source:'Gloom Parasite',       rarities:['Unique'] },
+  { source:'Narlathak',            rarities:['Unique'] },
+  { source:'Council of Five',      rarities:['Unique'] },
+  { source:'Old Granddad',         rarities:['Unique'] },
+  { source:'Riptide Horror',       rarities:['Unique'] },
+  { source:'Leviathan',            rarities:['Unique'] },
+];
+const HEART_TOTAL = HEART_CATALOGUE.reduce((sum, h) => sum + h.rarities.length, 0);
 
 // ── Beast catalogue ─────────────────────────────────────────────────────────
 // Each entry = one species with every (blueprint GUID × rarity) kill to track.
@@ -360,6 +419,7 @@ const ACHIEVEMENT_DEFS = [
         id: 'keeper_of_the_legendaries',
         name: 'Keeper of the Legendaries',
         desc: 'Find all Legendary items at least once across your characters.',
+        expandable: true,
         evaluate: s => ({ earned: s.legFound === s.legTotal, progress: s.legFound, progressMax: s.legTotal }),
       },
       {
@@ -379,13 +439,24 @@ const ACHIEVEMENT_DEFS = [
         }),
       },
       {
+        id: 'its_a_kind_of_magic',
+        name: "It's a Kind of Magic",
+        desc: 'Reach 100% Magic Find on any single character.',
+        evaluate: s => ({
+          earned: s.mfMax >= 100,
+          progress: Math.min(Math.round(s.mfMax), 100),
+          progressMax: 100,
+        }),
+      },
+      {
         id: 'owner_of_all_hearts',
         name: 'Owner of All the Hearts',
-        desc: 'Collect a heart of every element (Fire, Cold, Lightning, Nature, Shadow) across your stash and characters.',
+        desc: 'Collect a heart of every rarity from every source in the demo.',
+        expandable: true,
         evaluate: s => ({
-          earned: ['fire','cold','lightning','nature','shadow'].every(e => s.heartsInStash.has(e)),
-          progress: s.heartsInStash.size,
-          progressMax: 5,
+          earned: s.heartsDone === s.heartTotal,
+          progress: s.heartsDone,
+          progressMax: s.heartTotal,
         }),
       },
     ],
@@ -452,6 +523,16 @@ const ACHIEVEMENT_DEFS = [
         desc: 'Have all 3 Skill Branches assigned on a single character.',
         evaluate: s => ({ earned: s.fullArsenal, progress: s.fullArsenal ? 1 : 0, progressMax: 0 }),
       },
+      {
+        id: 'the_sage',
+        name: 'The Sage',
+        desc: 'Use all 8 attribute tomes (Agility, Might, Power, Vigor — Tier I & II) across your characters.',
+        evaluate: s => ({
+          earned: s.usedTomes.size >= 8,
+          progress: s.usedTomes.size,
+          progressMax: 8,
+        }),
+      },
     ],
   },
 
@@ -482,6 +563,8 @@ const ACHIEVEMENT_DEFS = [
 if (typeof window !== 'undefined') {
   window.BEAST_CATALOGUE  = BEAST_CATALOGUE;
   window.BEAST_TOTAL      = BEAST_TOTAL;
+  window.HEART_CATALOGUE  = HEART_CATALOGUE;
+  window.HEART_TOTAL      = HEART_TOTAL;
   window.ACHIEVEMENT_BP   = ACHIEVEMENT_BP;
   window.ACHIEVEMENT_DEFS = ACHIEVEMENT_DEFS;
 }

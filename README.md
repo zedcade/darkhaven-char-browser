@@ -7,14 +7,16 @@ An unofficial fan-made save file inspector for [Darkhaven](https://moonbeastgame
 
 ## How to use
 
-1. Open `index.html` directly in **Chrome, Edge, Opera or Brave** (requires the [File System Access API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_Access_API) — Firefox is not supported)
-2. Click **Open Save Folder** and select your Darkhaven save directory
+1. Open `index.html` in **Chrome, Edge, Opera, Brave or Firefox**
+2. Click **Scan Save Folder** and select your Darkhaven save directory
 3. Your characters load automatically — click any character card to view details
 
 Your save folder is typically at:
 ```
 %APPDATA%\LocalLow\MoonBeast Production\Darkhaven Demo\Save
 ```
+
+> **Note:** Chrome/Edge/Opera/Brave remember the folder between sessions and can rescan automatically. Firefox re-prompts for the folder on every page load (browser limitation — no persistent folder access in Firefox).
 
 No installation, no server, no internet connection required. Everything runs locally in the browser.
 
@@ -63,17 +65,22 @@ No installation, no server, no internet connection required. Everything runs loc
 - Top killed monsters with counts, sortable by kills, Rarity, and Monsters
 - Panel can be collapsed/expanded, state saved between sessions
 
-**Legendary Catalogue**
-![Legendary Catalogue Panel](img/screenshots/legendaries.png)
-- Summary panel listing all legendary items found across the loaded saves
-- Panel can be collapsed/expanded, state saved between sessions
+**Achievements**
+![Achievements Panel](img/screenshots/achievements.png)
+- Fan-curated achievement system tracking progress across all loaded save files
+- Categories: Beast Master, Treasure Master, Ink Master, Skill Master, Survivor
+- Each achievement shows a progress bar and earned status
+- Expandable tracking grids for:
+  - **Hunter Extraordinaire** — every monster species × rarity combination
+  - **Owner of All the Hearts** — every heart source mob × rarity tier (N/E/C/U dots)
+  - **Keeper of the Legendaries** — full legendary item catalogue with found/not-found status and hover tooltips
+- Fully mastered categories show a gold glow effect on the category card
+- Collapse/expand state saved between sessions
 
 **Multi-save support**
 - Loads all `.max` save files from a folder (and subfolders) at once
 - Groups saves by character, shows most recent per character by default
 - Configurable limit (default: 20 saves per character) to keep loading fast
-
-Tip: Use the [HavenForge](https://havenforge.gg) app to manage multiple Single Player Save files in the Darkhaven pre-alpha Demo.
 
 ---
 
@@ -82,12 +89,15 @@ Tip: Use the [HavenForge](https://havenforge.gg) app to manage multiple Single P
 | File | Purpose | Required |
 |------|---------|----------|
 | `index.html` | App shell and layout | Yes |
-| `app.js` | UI rendering, tooltip system, stash grid | Yes |
+| `app.js` | UI rendering, tooltip system, stash grid, achievement rendering | Yes |
 | `app.css` | Main style definitions for page appearance | Yes |
 | `maxparser.js` | `.max` save file parser — decompression, stat extraction, item resolution | Yes |
-| `maxguids.js` | DH_GUIDS container for all known guids from the .max save files (Demo only) | Yes |
-| `skills.md`| Details the skills and skill upgrade information, will need to be updated as the game advances. Not needed for the tool to run, documentation only. | No |
-| `darkhaven_save_format.md` | Analysis of the .max save format and its GUIDs (Demo version). Not needed for the tool to run, documentation only. | No |
+| `maxguids.js` | Blueprint GUID dictionary for all known entities in the Demo save format | Yes |
+| `gamedata.js` | Game constants — stats, slots, heart/legendary/gem data, display name maps | Yes |
+| `achievements.js` | Achievement definitions and heart/beast catalogues — pure data, edit here to add achievements | Yes |
+| `skills.js` | Skill and skill upgrade definitions | Yes |
+| `skills.md` | Skill documentation. Not needed to run, documentation only. | No |
+| `darkhaven_save_format.md` | Analysis of the `.max` save format and its GUIDs (Demo version). Not needed to run, documentation only. | No |
 
 ## Folder structure
 | Folder | Contents | File pattern |
@@ -109,9 +119,10 @@ Tip: Use the [HavenForge](https://havenforge.gg) app to manage multiple Single P
 
 ## Limitations
 
-- **Chromium-based browsers only** — the File System Access API is not supported in Firefox or Safari
+- **Folder memory:** Chrome/Edge/Brave/Opera remember the save folder across sessions via the File System Access API. Firefox always re-prompts for the folder on page load.
 - Save format is reverse-engineered and may break after game updates
 - Some item names and stats may be missing or approximate for newer content
+- Heart source names for newly added monsters depend on their blueprint name being present in `maxguids.js` — update that file when new GUIDs become available
 
 ---
 

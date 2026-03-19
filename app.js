@@ -855,6 +855,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let achieveGems       = new Set(); // all gem types seen in stash across all chars
   let achieveRuneTypes  = new Set(); // all rune types seen in stash
   let achieveHearts     = new Set(); // all heart elements seen in stash/sockets across all chars
+  let achieveHeartsFound= {};        // "sourceName|Rarity" → true
+  let achieveMFMax      = 0;         // highest magic find % on any single char
+  let achieveUsedTomes  = new Set(); // 'vigor_1','vigor_2','might_1','might_2','agility_1','agility_2','power_1','power_2'
 
   function _resetAchievements() {
     achieveKills       = {};
@@ -868,6 +871,9 @@ document.addEventListener('DOMContentLoaded', () => {
     achieveGems        = new Set();
     achieveRuneTypes   = new Set();
     achieveHearts      = new Set();
+    achieveHeartsFound = {};
+    achieveMFMax       = 0;
+    achieveUsedTomes   = new Set();
   }
 
   function _aggregateAchievements(data) {
@@ -902,6 +908,29 @@ document.addEventListener('DOMContentLoaded', () => {
         if (sock.type === 'heart' && sock.heartElement) achieveHearts.add(sock.heartElement);
       }
     }
+    // Hearts found by source × rarity (stash items + equipped hearts + socketed hearts)
+    for (const item of [...(data.stash||[]), ...(data.equipment||[])]) {
+      if (item.heartSourceName && item.heartRarity)
+        achieveHeartsFound[item.heartSourceName+'|'+item.heartRarity] = true;
+    }
+    for (const item of data.equipment || []) {
+      for (const sock of item.socketed || []) {
+        if (sock.type === 'heart' && sock.heartSourceName && sock.heartRarity)
+          achieveHeartsFound[sock.heartSourceName+'|'+sock.heartRarity] = true;
+      }
+    }
+    // Magic Find max
+    if ((data.stats?.magicFind || 0) > achieveMFMax) achieveMFMax = data.stats.magicFind || 0;
+    // Attribute tomes used — intrinsic count ≥ tier means that tier was consumed
+    const _si = data.stats || {};
+    if ((_si.vitalityIntrinsic  ||0) >= 1) achieveUsedTomes.add('vigor_1');
+    if ((_si.vitalityIntrinsic  ||0) >= 2) achieveUsedTomes.add('vigor_2');
+    if ((_si.strengthIntrinsic  ||0) >= 1) achieveUsedTomes.add('might_1');
+    if ((_si.strengthIntrinsic  ||0) >= 2) achieveUsedTomes.add('might_2');
+    if ((_si.dexterityIntrinsic ||0) >= 1) achieveUsedTomes.add('agility_1');
+    if ((_si.dexterityIntrinsic ||0) >= 2) achieveUsedTomes.add('agility_2');
+    if ((_si.magicIntrinsic     ||0) >= 1) achieveUsedTomes.add('power_1');
+    if ((_si.magicIntrinsic     ||0) >= 2) achieveUsedTomes.add('power_2');
     // Skills maxed
     if (typeof SKILLS_DEF !== 'undefined' && (data.skillLevels||[]).length) {
       const skByRaw = {};
@@ -971,6 +1000,11 @@ document.addEventListener('DOMContentLoaded', () => {
       hoarder:        achieveHoarder,
       gemsInStash:    achieveGems,
       heartsInStash:  achieveHearts,
+      heartsFound:    achieveHeartsFound,
+      heartsDone:     Object.values(achieveHeartsFound).filter(Boolean).length,
+      heartTotal:     typeof HEART_TOTAL !== 'undefined' ? HEART_TOTAL : 0,
+      mfMax:          achieveMFMax,
+      usedTomes:      achieveUsedTomes,
     };
 
     // ── Evaluate all achievements ─────────────────────────────────────────────
@@ -1185,13 +1219,113 @@ document.addEventListener('DOMContentLoaded', () => {
       return g;
     }
 
+    // ── Heart grid (sub-content for Owner of All the Hearts) ─────────────────
+    function makeHeartGrid() {
+      const HEART_RC = { Common:'#9ca3af', Elite:'#60a5fa', Champion:'#c084fc', Unique:'#d4a84b' };
+      const SHORT_H  = { Common:'N', Elite:'E', Champion:'C', Unique:'U' };
+      const g = document.createElement('div');
+      g.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:4px;margin-top:8px;';
+      const catalogue = (typeof HEART_CATALOGUE !== 'undefined') ? HEART_CATALOGUE : [];
+      for (const entry of catalogue) {
+        const allK = entry.rarities.every(r => state.heartsFound[entry.source+'|'+r]);
+        const anyK = entry.rarities.some(r  => state.heartsFound[entry.source+'|'+r]);
+        const cell = document.createElement('div');
+        cell.style.cssText =
+          'background:rgba(255,255,255,0.03);border:1px solid '+
+          (allK?'rgba(212,168,75,0.3)':anyK?'rgba(255,255,255,0.1)':'rgba(255,255,255,0.05)')+
+          ';border-radius:4px;padding:5px 7px;';
+        const nm = document.createElement('div');
+        nm.style.cssText = 'font-size:.68rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'+
+          'color:'+(allK?'#d4a84b':anyK?'#ccc':'rgba(255,255,255,0.25)')+';margin-bottom:4px;';
+        nm.textContent = (allK?'\u2756 ':'')+entry.source;
+        cell.appendChild(nm);
+        const dots = document.createElement('div');
+        dots.style.cssText = 'display:flex;gap:3px;flex-wrap:wrap;';
+        for (const rar of entry.rarities) {
+          const found = !!state.heartsFound[entry.source+'|'+rar];
+          const d = document.createElement('span');
+          d.title = rar + (found?' \u2713':' \u2014 not yet found');
+          d.style.cssText =
+            'display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;'+
+            'border-radius:3px;font-size:.58rem;font-weight:700;background:'+
+            (found?(HEART_RC[rar]||'#888'):'rgba(255,255,255,0.06)')+
+            ';color:'+(found?'#111':'rgba(255,255,255,0.2)')+';';
+          d.textContent = SHORT_H[rar]||rar[0];
+          dots.appendChild(d);
+        }
+        cell.appendChild(dots);
+        g.appendChild(cell);
+      }
+      return g;
+    }
+
+    // ── Legendary grid (sub-content for Keeper of the Legendaries) ────────────
+    function makeLegGrid() {
+      const slotIconMap = {
+        Amulet:'📿', Belt:'🔰', Boots:'👟', Chest:'🧥', 'Main Hand':'⚔️',
+        Flask:'🧪', Gloves:'🧤', Helm:'🪖', Ring:'💍', 'Off Hand':'🛡️',
+      };
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'margin-top:8px;';
+      const cats = [...new Set(LEGENDARY_CATALOGUE.map(e => e.cat))];
+      for (const cat of cats) {
+        const items = LEGENDARY_CATALOGUE.filter(e => e.cat === cat);
+        const sec = document.createElement('div');
+        sec.className = 'dh-leg-section';
+        sec.innerHTML =
+          '<div class="dh-leg-cat-label"><span>'+(CAT_ICON[cat]||'📦')+'</span> '+esc(cat)+'</div>'+
+          '<div class="dh-leg-items-grid"></div>';
+        wrap.appendChild(sec);
+        const grid = sec.querySelector('.dh-leg-items-grid');
+        for (const entry of items) {
+          const slot  = legCatalogue[entry.id];
+          const found = slot.instances.length > 0;
+          const best  = found ? slot.instances[0].item : null;
+          const imgFile = LEG_IMAGES[entry.id];
+          const card = document.createElement('div');
+          card.className = 'dh-leg-card '+(found?'dh-leg-card--found':'dh-leg-card--missing');
+          card.innerHTML =
+            '<div class="dh-leg-card-name">'+esc(entry.name)+'</div>'+
+            '<div class="dh-leg-card-img-wrap">'+
+              (imgFile
+                ? '<img src="img/items/'+imgFile+'" alt="'+esc(entry.name)+'" class="dh-leg-card-img" onerror="this.style.display=\'none\'">'
+                : '<span style="font-size:1.8rem;opacity:'+(found?'1':'0.3')+';">'+(slotIconMap[entry.slot]||'⚙️')+'</span>')+
+            '</div>'+
+            '<div class="dh-leg-card-meta">'+
+              (found
+                ? 'iLv '+(best.level||'?')+' \xB7 '+esc(slot.instances[0].charName)+
+                  (slot.instances.length>1?'<span class="dh-leg-card-count"> \xD7'+slot.instances.length+'</span>':'')
+                : 'Not found')+
+            '</div>';
+          if (found) {
+            card.addEventListener('mouseenter', e => {
+              const inst = slot.instances[0];
+              const _legItem = Object.assign({}, inst.item, {
+                _tipDividerClass: 'tip-divider--gold',
+                _tipFooterHtml:
+                  '<div class="tip-leg-footer">Found <span class="tip-leg-found">'+slot.instances.length+'\xD7</span> across your characters'+
+                  (slot.instances.some(i=>i.source==='stash')?' \xA0<span class="tip-leg-stash">(some in stash)</span>':'')+
+                  '</div>',
+              });
+              showItemTip(_legItem, e.clientX, e.clientY);
+            });
+            card.addEventListener('mouseleave', () => hideTip());
+          }
+          grid.appendChild(card);
+        }
+      }
+      return wrap;
+    }
+
     // ── Render all categories from ACHIEVEMENT_DEFS ───────────────────────────
     for (const { cat, achResults, catEarned, catTotal } of catResults) {
       const { wrap, body } = makeSection(cat.category, cat.label, cat.icon, catEarned, catTotal);
       for (const { ach, earned, progress, progressMax } of achResults) {
         if (ach.expandable) {
-          // Only 'hunter_extraordinaire' uses the beast grid — keyed by id
-          const subFn = ach.id === 'hunter_extraordinaire' ? makeBeastGrid : () => document.createElement('div');
+          const subFn = ach.id === 'hunter_extraordinaire'    ? makeBeastGrid
+                      : ach.id === 'owner_of_all_hearts'       ? makeHeartGrid
+                      : ach.id === 'keeper_of_the_legendaries' ? makeLegGrid
+                      : () => document.createElement('div');
           body.appendChild(makeExpandableCard(ach.id, ach.name, ach.desc, earned, progress, progressMax, subFn));
         } else {
           body.appendChild(makeAchCard(ach.name, ach.desc, earned, progress, progressMax));
@@ -1202,125 +1336,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const ow = document.querySelector('#equip-container .dh-outer-wrap');
     if (ow) ow.appendChild(panel);
-    else {
-      const lp = document.getElementById('legendary-panel');
-      if (lp) lp.parentNode.insertBefore(panel, lp.nextSibling);
-      else document.getElementById('equip-container').appendChild(panel);
-    }
+    else document.getElementById('equip-container').appendChild(panel);
   }
 
-
-  // ── Legendary panel render ────────────────────────────────────────────────
-  function renderLegendaryPanel() {
-    const existing = document.getElementById('legendary-panel');
-    if (existing) existing.remove();
-
-    const panel = document.createElement('div');
-    panel.id = 'legendary-panel';
-    panel.className = 'dh-leg-panel';
-
-    const _legCollapsed = getPanelCollapsed('legendary');
-
-    // Header
-    const totalFound = LEGENDARY_CATALOGUE.filter(e => legCatalogue[e.id].instances.length > 0).length;
-    const legHdr = document.createElement('div');
-    legHdr.className = 'dh-leg-hdr';
-    legHdr.style.cursor = 'pointer';
-    legHdr.innerHTML =
-      '<span class="dh-leg-icon">⭐</span>' +
-      '<h2 class="dh-leg-hdr-title">Legendary Items</h2>' +
-      '<span class="dh-leg-hdr-sep">·</span>' +
-      '<span class="dh-leg-hdr-count">' + totalFound + ' / ' + LEGENDARY_CATALOGUE.length + ' found in loaded saves</span>' +
-      '<span class="dh-leg-hdr-spacer"></span>';
-    const _legToggle = makePanelToggle(_legCollapsed);
-    legHdr.appendChild(_legToggle);
-    panel.appendChild(legHdr);
-
-    const cats = [...new Set(LEGENDARY_CATALOGUE.map(e => e.cat))];
-
-    const legBody = document.createElement('div');
-    legBody.className = 'dh-leg-body';
-    if (_legCollapsed) legBody.style.display = 'none';
-    panel.appendChild(legBody);
-
-    legHdr.addEventListener('click', () => {
-      const nowCollapsed = legBody.style.display === 'none';
-      legBody.style.display = nowCollapsed ? '' : 'none';
-      setPanelCollapsed('legendary', !nowCollapsed);
-      _legToggle.classList.toggle('dh-panel-toggle--collapsed', !nowCollapsed);
-    });
-
-    const legCatGrid = document.createElement('div');
-    legCatGrid.className = 'dh-leg-cat-grid';
-    legBody.appendChild(legCatGrid);
-
-    const slotIconMap = {
-      Amulet:'📿', Belt:'🔰', Boots:'👟', Chest:'🧥', 'Main Hand':'⚔️',
-      Flask:'🧪', Gloves:'🧤', Helm:'🪖', Ring:'💍', 'Off Hand':'🛡️',
-    };
-
-    for (const cat of cats) {
-      const items = LEGENDARY_CATALOGUE.filter(e => e.cat === cat);
-      const section = document.createElement('div');
-      section.className = 'dh-leg-section';
-      section.innerHTML =
-        '<div class="dh-leg-cat-label"><span>' + (CAT_ICON[cat]||'📦') + '</span> ' + cat + '</div>' +
-        '<div class="dh-leg-items-grid" id="leg-cat-' + cat + '"></div>';
-      legCatGrid.appendChild(section);
-
-      const grid = section.querySelector('#leg-cat-' + cat);
-      for (const entry of items) {
-        const slot = legCatalogue[entry.id];
-        const found = slot.instances.length > 0;
-        const best  = found ? slot.instances[0].item : null;
-        const imgFile = LEG_IMAGES[entry.id];
-
-        const card = document.createElement('div');
-        card.className = 'dh-leg-card ' + (found ? 'dh-leg-card--found' : 'dh-leg-card--missing');
-
-        card.innerHTML =
-          '<div class="dh-leg-card-name">' + esc(entry.name) + '</div>' +
-          '<div class="dh-leg-card-img-wrap">' +
-            (imgFile
-              ? '<img src="img/items/' + imgFile + '" alt="' + esc(entry.name) + '" class="dh-leg-card-img" onerror="this.style.display=\'none\'">'
-              : '<span style="font-size:1.8rem;opacity:' + (found?'1':'0.3') + ';">' + (slotIconMap[entry.slot]||'⚙️') + '</span>') +
-          '</div>' +
-          '<div class="dh-leg-card-meta">' +
-            (found
-              ? 'iLv ' + (best.level||'?') + ' · ' + esc(slot.instances[0].charName) +
-                (slot.instances.length > 1 ? '<span class="dh-leg-card-count"> ×' + slot.instances.length + '</span>' : '')
-              : 'Not found') +
-          '</div>';
-
-        if (found) {
-          card.addEventListener('mouseenter', e => {
-            const inst = slot.instances[0];
-            const _legItem = Object.assign({}, inst.item, {
-              _tipDividerClass: 'tip-divider--gold',
-              _tipFooterHtml:
-                '<div class="tip-leg-footer">Found <span class="tip-leg-found">' + slot.instances.length + '×</span> across your characters' +
-                (slot.instances.some(i => i.source === 'stash') ? ' &nbsp;<span class="tip-leg-stash">(some in stash)</span>' : '') +
-                '</div>',
-            });
-            showItemTip(_legItem, e.clientX, e.clientY);
-          });
-          card.addEventListener('mouseleave', () => hideTip());
-        }
-
-        grid.appendChild(card);
-      }
-    }
-
-    // Append into the outerWrap so it participates in gap:8px like all other panels
-    const outerWrapEl = document.querySelector('#equip-container .dh-outer-wrap');
-    if (outerWrapEl) {
-      outerWrapEl.appendChild(panel);
-    } else {
-      // Fallback: insert after equip-container
-      const equipEl = document.getElementById('equip-container');
-      equipEl.parentNode.insertBefore(panel, equipEl.nextSibling);
-    }
-  }
 
   // ── Tooltip ───────────────────────────────────────────────────────────────
   let tipEl = null;
@@ -1911,7 +1929,6 @@ document.addEventListener('DOMContentLoaded', () => {
       renderChar(data);
       _aggregateAchievements(data);
       _finalizeAchievements();
-      renderLegendaryPanel();
       renderAchievementsPanel();
     } catch(err) {
       console.error(err);

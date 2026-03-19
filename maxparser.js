@@ -36,11 +36,30 @@ const _HEART_NAMES_MAP = {
   'Bogie Feral Unit':                    'Bogie Feral',
   'Bogie Spearman Unit':                 'Bogie Spearman',
   'Doomed Soldier 2H Spear Unit':        'Doomed Soldier',
+  'Doomed Soldier Unit':                 'Doomed Soldier',
+  'Doomed Soldier 0H Blunt Unit':        'Doomed Soldier',
+  'Doomed Soldier 1H Blunt Unit':        'Doomed Soldier',
+  'Doomed Soldier 1H Slashing Unit':     'Doomed Soldier',
+  'Doomed Soldier 2H Blunt Unit':        'Doomed Soldier',
+  'Doomed Soldier 2H Slashing Unit':     'Doomed Soldier',
+  'Deep Ones Unit':                      'Riverfang',
   'Giant Blight Roach Unit':             'Giant Blight Roach',
   'Gloom Parasite Unit':                 'Gloom Parasite',
   'Gulpjaw Unit':                        'Gulpjaw',
   'Skeleton Frost Mage Unit':            'Skeleton Frost Mage',
-  'Tunnel Thug Unit':                    'Tunnel Thug',
+  // Tunnel Thug Unit is the internal blueprint for Babanikku (named unique encounter)
+  'Tunnel Thug Unit':                    'Babanikku',
+  // Named champion encounters — fallback would give "Champion X", which is wrong
+  'Champion Burial Knight Unit':         'Esclados the Turncoat',
+  'Champion Baragon Unit':               'Arb the Enslaver',  // internal blueprint for the Arb the Enslaver encounter
+  'Champion Gulpjaw Unit':               'Sizzle Bough',       // internal blueprint for the Sizzle Bough encounter
+  'Melee Swamp Husk Champion Unit':      'Sizzle Bough',
+  // Bone Legion variants all map to the same display name
+  'Bone Legion 1H Blunt Unit':           'Bone Legion',
+  'Bone Legion 1H Slashing Unit':        'Bone Legion',
+  'Bone Legion 2H Blunt Unit':           'Bone Legion',
+  'Bone Legion 2H Slashing Unit':        'Bone Legion',
+  'Bone Legion 2H Spear Unit':           'Bone Legion',
   // Unique bosses — display names corrected per game data
   'Barrow Knight 1H Slashing Unique Unit': 'Disgraced Paladin',
   'Bogie Feral Unique Unit':             'Rokkudokin',
@@ -59,13 +78,16 @@ const _HEART_NAMES_MAP = {
 const _UNIQUE_HEART_MONSTERS = new Set([
   'Barrow Knight 1H Slashing Unique Unit',  // Disgraced Paladin
   'Bogie Feral Unique Unit',                // Rokkudokin
+  'Champion Baragon Unit',                  // Arb the Enslaver (Champion Baragon Unit blueprint, drops Unique Lightning heart)
+  'Gloom Parasite Unit',                    // Gloom Parasite
   'Gulpjaw Unique Unit',                    // Blubberjaw
+  'Leviathan Unique Unit',                  // Leviathan
   'Melee Swamp Husk Unique Unit',           // Char Root
   'Mega Gazer Unit',                        // Goke the Intruder
   'Necropolis Lich Boss Unit',              // Narlathak
   'Skeleton Shadow Mage Unique Unit',       // Council of Five
   'Unique Bramblehusk Unit',                // Old Granddad
-  'Gloom Parasite Unit',                    // Gloom Parasite
+  'Tunnel Thug Unit',                       // Babanikku (named unique encounter)
   'Unique Deep Ones Unit',                  // Riptide Horror
 ]);
 
@@ -98,7 +120,7 @@ function resolveHeartInfo(srcBpName, heartBpName) {
   const prefix = rarity === 'Champion' ? 'Champion ' : rarity === 'Elite' ? 'Elite ' : '';
   const name   = prefix + baseName + ' Heart';
   const isUniqueSocket = _UNIQUE_HEART_MONSTERS.has(srcBpName);
-  return { name, rarity, element, isUniqueSocket };
+  return { name, rarity, element, isUniqueSocket, sourceName: baseName };
 }
 
 // DAMAGE_TYPE_GUIDS provided by gamedata.js
@@ -951,7 +973,7 @@ function processCharacterData(data, digest) {
       const isHeart = /core/i.test(bpName);
       const isRune  = /rune/i.test(bpName);
       const sockType = isHeart ? 'heart' : isRune ? 'rune' : 'gem';
-      let sockRarity = 'Common', sockName = null, sockHeartRarity = undefined, sockHeartElement = undefined;
+      let sockRarity = 'Common', sockName = null, sockHeartRarity = undefined, sockHeartElement = undefined, sockHeartSourceName = undefined;
 
       if (isHeart) {
         // Look for CORE_SOURCE stat on the socketed heart's unit to get the source monster
@@ -966,6 +988,7 @@ function processCharacterData(data, digest) {
           sockRarity        = heartInfo.rarity;
           sockHeartRarity   = heartInfo.rarity;
           sockHeartElement  = heartInfo.element;
+          sockHeartSourceName = heartInfo.sourceName;
         } else {
           // Fallback: infer rarity from blueprint name keywords
           if (/\bChampion\b/i.test(bpName))    { sockRarity = 'Champion'; sockHeartRarity = 'Champion'; }
@@ -985,7 +1008,7 @@ function processCharacterData(data, digest) {
       }
 
       if (!parent.socketed) parent.socketed = [];
-      parent.socketed.push({ type: sockType, rarity: sockRarity, heartRarity: sockHeartRarity, heartElement: sockHeartElement, name: sockName || sockType });
+      parent.socketed.push({ type: sockType, rarity: sockRarity, heartRarity: sockHeartRarity, heartElement: sockHeartElement, heartSourceName: sockHeartSourceName, name: sockName || sockType });
     }
 
     // Track per-item armor contributions from affixes (mirrors Hf())
@@ -1323,6 +1346,7 @@ function processCharacterData(data, digest) {
       item.name                 = item.heartName;
       item.heartRarity          = _heartRarity;
       item.heartElement         = _heartElement;
+      item.heartSourceName      = _baseName;   // canonical mob name, e.g. "Blight Roach"
       item.heartIsUniqueSocket  = _UNIQUE_HEART_MONSTERS.has(_srcBpName);
       item.slot        = 'core';
       item.slotDisplay = 'Core';
@@ -1417,7 +1441,7 @@ function processCharacterData(data, digest) {
       const sbpName = DH_GUIDS[unit.blueprint||''] || '';
       const sIsHeart = /core/i.test(sbpName), sIsRune = /rune/i.test(sbpName);
       const sType = sIsHeart ? 'heart' : sIsRune ? 'rune' : 'gem';
-      let sRarity = 'Common', sName = null, sHeartRarity = undefined, sHeartElement = undefined;
+      let sRarity = 'Common', sName = null, sHeartRarity = undefined, sHeartElement = undefined, sHeartSourceName = undefined;
 
       if (sIsHeart) {
         let heartSrcBp2 = null;
@@ -1431,6 +1455,7 @@ function processCharacterData(data, digest) {
           sRarity            = heartInfo2.rarity;
           sHeartRarity       = heartInfo2.rarity;
           sHeartElement      = heartInfo2.element;
+          sHeartSourceName   = heartInfo2.sourceName;
         } else {
           if (/\bChampion\b/i.test(sbpName))    { sRarity = 'Champion'; sHeartRarity = 'Champion'; }
           else if (/\bElite\b/i.test(sbpName))  { sRarity = 'Elite';    sHeartRarity = 'Elite'; }
@@ -1449,7 +1474,7 @@ function processCharacterData(data, digest) {
       }
 
       if (!parent.socketed) parent.socketed = [];
-      parent.socketed.push({ type: sType, rarity: sRarity, heartRarity: sHeartRarity, heartElement: sHeartElement, name: sName || sType });
+      parent.socketed.push({ type: sType, rarity: sRarity, heartRarity: sHeartRarity, heartElement: sHeartElement, heartSourceName: sHeartSourceName, name: sName || sType });
     }
 
     const bp      = unit.blueprint || '';
