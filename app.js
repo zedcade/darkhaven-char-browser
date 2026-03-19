@@ -792,6 +792,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let achieveRunes      = new Set(); // all rune nums seen in tattoos across all chars
   let achieveGems       = new Set(); // all gem types seen in stash across all chars
   let achieveRuneTypes  = new Set(); // all rune types seen in stash
+  let achieveHearts     = new Set(); // all heart elements seen in stash/sockets across all chars
 
   function _resetAchievements() {
     achieveKills       = {};
@@ -804,6 +805,7 @@ document.addEventListener('DOMContentLoaded', () => {
     achieveRunes       = new Set();
     achieveGems        = new Set();
     achieveRuneTypes   = new Set();
+    achieveHearts      = new Set();
   }
 
   function _aggregateAchievements(data) {
@@ -829,10 +831,14 @@ document.addEventListener('DOMContentLoaded', () => {
     for (const item of data.stash || []) {
       if (item.gemType) achieveGems.add(item.gemType);
       if (item.runeNum) achieveRuneTypes.add(item.runeNum);
+      if (item.heartElement) achieveHearts.add(item.heartElement);
     }
     // Also check equipped items for gems
     for (const item of data.equipment || []) {
       if (item.gemType) achieveGems.add(item.gemType);
+      for (const sock of item.socketed || []) {
+        if (sock.type === 'heart' && sock.heartElement) achieveHearts.add(sock.heartElement);
+      }
     }
     // Skills maxed
     if (typeof SKILLS_DEF !== 'undefined' && (data.skillLevels||[]).length) {
@@ -902,6 +908,7 @@ document.addEventListener('DOMContentLoaded', () => {
       deathFree:      achieveDeathFree,
       hoarder:        achieveHoarder,
       gemsInStash:    achieveGems,
+      heartsInStash:  achieveHearts,
     };
 
     // ── Evaluate all achievements ─────────────────────────────────────────────
@@ -957,6 +964,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const hdr = document.createElement('div');
       hdr.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;background:rgba(255,255,255,0.03);user-select:none;';
       const allDone = earnedCount === totalCount;
+      if (allDone) wrap.classList.add('dh-ach-cat--mastered');
       hdr.innerHTML =
         '<span style="font-size:.9rem;">' + icon + '</span>' +
         '<span style="font-size:.8rem;font-weight:600;color:' + (allDone?'#d4a84b':'#ccc') + ';flex:1;">' +

@@ -50,8 +50,9 @@
 //   s.deathFree      {boolean} any char reached level 20 with 0 deaths
 //   s.hoarder        {boolean} any legendary found ≥3 times
 //   s.gemsInStash    {Set}     gem types ('amber','jade',...) seen in stash
+//   s.heartsInStash  {Set}     heart elements ('fire','cold','lightning','nature','shadow') seen in stash/sockets
 //
-// Last updated: patch 0.0.23609 (2026-03-16)
+// Last updated: patch 0.0.23609 (2026-03-19)
 // ---------------------------------------------------------------------------
 
 // ── Beast catalogue ─────────────────────────────────────────────────────────
@@ -105,7 +106,7 @@ const BEAST_CATALOGUE = [
     { bp:'e4295282e4e6fb34d923d6255383a2d7', rarity:'Normal'          },
     { bp:'e4295282e4e6fb34d923d6255383a2d7', rarity:'Elite'           },
     { bp:'e4295282e4e6fb34d923d6255383a2d7', rarity:'Champion Minion' }]},
-  { species:'Warren Chief',            entries:[{ bp:'617854e717f433a4a91111560f532cf6', rarity:'Champion' }]},
+  { species:'Warren Chief',            entries:[{ bp:'617854e717f433a4a91111560f532cf6', rarity:'Unique' }]},
 
   // ── Bone Legion ────────────────────────────────────────────────────────────
   { species:'Bone Legion (Unarmed)',   entries:[
@@ -306,7 +307,7 @@ const ACHIEVEMENT_DEFS = [
   // ── Beastmaster ────────────────────────────────────────────────────────────
   {
     category: 'beastmaster',
-    label: 'Beastmaster',
+    label: 'Beast Master',
     icon: '🐾',
     achievements: [
       {
@@ -377,13 +378,23 @@ const ACHIEVEMENT_DEFS = [
           progressMax: 6,
         }),
       },
+      {
+        id: 'owner_of_all_hearts',
+        name: 'Owner of All the Hearts',
+        desc: 'Collect a heart of every element (Fire, Cold, Lightning, Nature, Shadow) across your stash and characters.',
+        evaluate: s => ({
+          earned: ['fire','cold','lightning','nature','shadow'].every(e => s.heartsInStash.has(e)),
+          progress: s.heartsInStash.size,
+          progressMax: 5,
+        }),
+      },
     ],
   },
 
   // ── Inkmaster ──────────────────────────────────────────────────────────────
   {
     category: 'inkmaster',
-    label: 'Inkmaster',
+    label: 'Ink Master',
     icon: '🖋',
     achievements: [
       {
@@ -414,7 +425,7 @@ const ACHIEVEMENT_DEFS = [
   // ── Skillmaster ────────────────────────────────────────────────────────────
   {
     category: 'skillmaster',
-    label: 'Skillmaster',
+    label: 'Skill Master',
     icon: '⚡',
     achievements: [
       {

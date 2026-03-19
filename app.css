@@ -855,3 +855,31 @@
   .dh-footer-link:hover, .dh-footer-link-gh:hover { color:#a78bfa; }
   .dh-sidebar-logo    { width:100%; max-width:220px; display:block; margin:auto; }
   .dh-filelist-empty  { padding:1.5rem; color:var(--text-muted); font-size:0.9rem; }
+
+  /* ── Achievement category: fully-mastered legendary glow ──────────────── */
+  @keyframes dh-cat-mastered-pulse {
+    0%, 100% {
+      box-shadow:
+        0 0  6px rgba(212,168,75, 0.25),
+        0 0 16px rgba(212,168,75, 0.12);
+      border-color: rgba(212,168,75, 0.35);
+    }
+    50% {
+      box-shadow:
+        0 0 10px rgba(212,168,75, 0.55),
+        0 0 28px rgba(212,168,75, 0.30),
+        0 0 52px rgba(212,168,75, 0.12),
+        inset 0 0 12px rgba(212,168,75, 0.06);
+      border-color: rgba(212,168,75, 0.85);
+    }
+  }
+
+  .dh-ach-cat--mastered {
+    /* animation: dh-cat-mastered-pulse 2.4s ease-in-out 2; */
+    /* border-color: rgba(212,168,75, 0.35) !important; */
+      box-shadow:
+    0 0  8px rgba(212,168,75, 0.40),
+    0 0 22px rgba(212,168,75, 0.18),
+    0 0 48px rgba(212,168,75, 0.08);
+  border-color: rgba(212,168,75, 0.65) !important;
+  }
