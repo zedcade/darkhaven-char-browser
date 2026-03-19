@@ -5,6 +5,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // folderInput replaced by showDirectoryPicker()
   const openFolderBtn  = document.getElementById('open-folder-btn');
   const fileListEl     = document.getElementById('file-list');
+  // Feature-detect the Chrome/Edge File System Access API.
+  // Firefox uses <input webkitdirectory> as fallback (see scanFromFileList below).
+  const HAS_DIR_PICKER = typeof window.showDirectoryPicker === 'function';
   const limitToggle    = document.getElementById('limit-toggle');
   const limitSpinner   = document.getElementById('limit-count');
   const resetFolderBtn = document.getElementById('reset-folder-btn');
@@ -260,8 +263,10 @@ document.addEventListener('DOMContentLoaded', () => {
     _input.addEventListener('keydown', e => { if (e.key === 'Enter') _confirm(); });
   }
 
-  // ── On load: try to restore the last folder handle ────────────────────────
+  // ── On load: try to restore the last folder handle (Chrome/Edge only) ──────
+  // Firefox doesn't support the File System Access API so there is nothing to restore.
   (async function tryRestoreFolder() {
+    if (!HAS_DIR_PICKER) return;
     try {
       const handle = await idbGet(IDB_KEY);
       if (!handle) return;
@@ -644,6 +649,36 @@ document.addEventListener('DOMContentLoaded', () => {
     await new Promise(r => setTimeout(r, 0));
 
     const allFiles = await collectMaxFiles(dirHandle);
+    await _processScanFiles(allFiles, dirHandle, bar, _spinEl, setLabel);
+  }
+
+  // Firefox / fallback path: files already collected via <input webkitdirectory>
+  async function scanFromFileList(fileList) {
+    const allFiles = Array.from(fileList).filter(f => f.name.endsWith('.max'));
+
+    openFolderBtn.disabled = true;
+    const _existingSub = openFolderBtn.querySelector('.btn-sublabel');
+    if (_existingSub) _existingSub.remove();
+    const _btnLabelEl = openFolderBtn.querySelector('.btn-label');
+    const setLabel = txt => {
+      if (_btnLabelEl) _btnLabelEl.textContent = txt;
+      else openFolderBtn.childNodes[0].textContent = txt;
+    };
+    let bar = document.createElement('div');
+    bar.className = 'scan-progress-bar scan-progress-bar--pulse';
+    openFolderBtn.appendChild(bar);
+    const _spinEl = document.createElement('span');
+    _spinEl.className = 'btn-spinner';
+    openFolderBtn.appendChild(_spinEl);
+    setLabel('Reading files…');
+    await new Promise(r => setTimeout(r, 0));
+
+    await _processScanFiles(allFiles, null, bar, _spinEl, setLabel);
+    promptFolderPath();
+  }
+
+  // Shared processing phase — called after files are in hand from either path
+  async function _processScanFiles(allFiles, dirHandle, bar, _spinEl, setLabel) {
     if (!allFiles.length) {
       if (bar) bar.remove();
       if (_spinEl) _spinEl.remove();
@@ -715,7 +750,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (_spinEl) _spinEl.remove();
     openFolderBtn.classList.remove('btn--rescan-pending');
     openFolderBtn.disabled = false;
-    _activeFolderHandle = dirHandle;
+    _activeFolderHandle = dirHandle; // null for Firefox — no persistent handle
 
     // Remove locked files so they don't appear as broken cards
     if (_lockedFiles.size > 0) {
@@ -752,9 +787,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Update path display — prompt for path on first pick, else show stored
     setFolderPathDisplay(false);
-  }  // end scanSaveFolder
+  }  // end _processScanFiles
+
+  // ── Firefox fallback: hidden <input webkitdirectory> ─────────────────────
+  // Created once; reused on every click. Value is cleared after use so the
+  // same folder can be re-selected (Chrome caches the handle via IDB instead).
+  let _ffInput = null;
+  if (!HAS_DIR_PICKER) {
+    _ffInput = document.createElement('input');
+    _ffInput.type = 'file';
+    _ffInput.setAttribute('webkitdirectory', '');
+    _ffInput.multiple = true;
+    _ffInput.style.display = 'none';
+    document.body.appendChild(_ffInput);
+    _ffInput.addEventListener('change', async () => {
+      const files = _ffInput.files;
+      _ffInput.value = ''; // reset so same folder triggers 'change' again next time
+      if (files && files.length) await scanFromFileList(files);
+    });
+  }
 
   openFolderBtn.addEventListener('click', async () => {
+    // ── Firefox / no File System Access API ──────────────────────────────────
+    if (!HAS_DIR_PICKER) {
+      _ffInput.click();
+      return;
+    }
+
+    // ── Chrome / Edge: rescan remembered handle ───────────────────────────────
     if (_activeFolderHandle) {
       try {
         // requestPermission() requires a user gesture — safe to call from click
@@ -766,6 +826,8 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch(e) { console.error('[rescan]', e); }
       return;
     }
+
+    // ── Chrome / Edge: first pick ─────────────────────────────────────────────
     let dirHandle;
     try {
       dirHandle = await window.showDirectoryPicker({ mode: 'read', id: 'darkhaven-saves', startIn: 'downloads' });
