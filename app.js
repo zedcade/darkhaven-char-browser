@@ -322,6 +322,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let loadedFiles = [];
   let charCache   = {};          // filename → parsed data
   let _currentCharData = null;  // currently displayed character data (for tooltip requirement checks)
+  let _currentItem     = null;  // item currently being rendered in tooltip (for merge exceptions)
   let legCatalogue = {};         // canonical id → { found, items[] }
   let stashViewMode = getStashView();   // 'list' | 'grid' — persisted in LS
 
@@ -1408,21 +1409,104 @@ document.addEventListener('DOMContentLoaded', () => {
   const ELEM_COLORS = {
     Fire:'#fa8072', Shadow:'#c084fc', Cold:'#93c5fd',
     Lightning:'#fde047', Nature:'#86efac', Burn:'#fa8072',
-    Bleed:'#e05050', Slashing:'#d4b8a0', Blunt:'#c9a87c',
+    Bleed:'#e07070',    // lighter red than Burn — for Bleed/Slashing status
+    Slashing:'#d4b8a0', Blunt:'#c9a87c',
+    Shock:'#fde047', Stun:'#c9a87c',  // Stun = Blunt color
+    Freeze:'#93c5fd', Entangle:'#86efac',
+    Acid:'#b5e853', Poison:'#8bc34a',
   };
+  // Element keyword → inline icon (matches resistance panel)
+  const ELEM_ICONS = {
+    Fire:'🔥', Shadow:'🌑', Cold:'❄️', Lightning:'⚡',
+    Nature:'🌿', Burn:'🔥', Shock:'⚡',
+    Bleed:'🩸', Slashing:'⚔️',
+    Blunt:'🔨', Stun:'🔨',   // Stun shares Blunt icon
+    Freeze:'❄️', Entangle:'🌿',
+  };
+  // Attribute / resource keywords → light-blue color
+  const ATTR_BLUE = '#93c5fd';
+  const ATTR_KEYWORDS = new Set(['Mana','Strength','Dexterity','Vitality','Magic','Life','Glyph','Blood']);
+  // Helper: for ALL-CAPS skill names, wrap first letter of each word in a slightly larger span
+  // so "FLAME LASH" renders with F and L visually dominant (like small-caps)
+  function capsSkillHtml(text, color) {
+    const isAllCaps = /^[A-Z][A-Z\s]+$/.test(text.trim());
+    if (!isAllCaps) return '<span style="color:' + color + ';">' + text + '</span>';
+    const styled = text.replace(/\b([A-Z])([A-Z]+)/g,
+      (_, first, rest) =>
+        '<span style="font-size:1.08em;letter-spacing:0.03em;">' + first + '</span>' +
+        '<span style="font-size:0.85em;letter-spacing:0.06em;">' + rest + '</span>');
+    return '<span style="color:' + color + ';">' + styled + '</span>';
+  }
+
   function colorElements(str) {
-    return str.replace(/\(?(Fire|Shadow|Cold|Lightning|Nature|Burn|Bleed|Slashing|Blunt)\)?/g,
-      m => {
-        const key = m.replace(/[()]/g, '');
-        const col = ELEM_COLORS[key];
-        if (!col) return m;
-        const hasParen = m.startsWith('(');
-        return (hasParen ? '(' : '') + '<span style="color:' + col + ';">' + key + '</span>' + (hasParen ? ')' : '');
+    // Pass 1: multi-word skill names — MUST run first so single-word passes don't split them
+    const _SKILL_CASE = {
+      'flame lash': 'FLAME LASH',
+      'blood lash': 'Blood Lash',
+      'glyph lunge': 'Glyph Lunge',
+      'feast for crows': 'Feast For Crows',
+      'bone spirit': 'Bone Spirit',
+      'shadow walk': 'Shadow Walk',
+      'spine breaker': 'Spine Breaker',
+      'bone storm': 'Bone Storm',
+    };
+    // Protect skills with placeholders so later element regex can't recolor "Shadow" in "Shadow Walk".
+    const _skillTokens = [];
+    let out = str.replace(/\b(FLAME LASH|Blood Lash|Glyph Lunge|Feast For Crows|Bone Spirit|Shadow Walk|Spine Breaker|Bone Storm)\b/gi,
+      (match) => {
+        const _canon = _SKILL_CASE[match.toLowerCase()] || match;
+        const _tok = '\u0000SK' + _skillTokens.length + '\u0000';
+        _skillTokens.push(capsSkillHtml(_canon, ATTR_BLUE));
+        return _tok;
       });
+
+    // Pass 2: element/status keywords with icons (word-boundary + HTML-skip lookahead)
+    out = out.replace(/\b(Fire|Shadow|Cold|Lightning|Nature|Burn|Bleed|Slashing|Blunt|Shock|Stun|Freeze|Entangle)\b(?![^<>]*>)/g,
+      (match, key) => {
+        const col  = ELEM_COLORS[key];
+        const icon = ELEM_ICONS[key] || '';
+        if (!col) return match;
+        return '<span style="color:' + col + ';">' + key + '</span>' +
+               (icon ? ' <span style="color:#e2e8f0;">(</span><span style="color:' + col + ';">' + icon + '</span><span style="color:#e2e8f0;">)</span>' : '');
+      });
+
+    // Pass 3: single attribute/resource/skill keywords (skip already-wrapped HTML)
+    out = out.replace(/\bBlood\b(?![^<>]*>)/g,
+      () => '<span style="color:' + ATTR_BLUE + ';">Blood</span>');
+    out = out.replace(/\b(Mana|Strength|Dexterity|Vitality|Life|Glyph|Witch)\b(?![^<>]*>)/g,
+      (match, key) => '<span style="color:' + ATTR_BLUE + ';">' + key + '</span>');
+    // Magic: only standalone, not in 'Magic Find/Stat/Bonus/Steal/Resistance'
+    out = out.replace(/\bMagic\b(?!\s+(?:Find|Stat|Bonus|Steal|Resistance))(?![^<>]*>)/g,
+      () => '<span style="color:' + ATTR_BLUE + ';">Magic</span>');
+    // Restore protected skill fragments
+    out = out.replace(/\u0000SK(\d+)\u0000/g, (_, i) => _skillTokens[parseInt(i, 10)] || '');
+    return out;
   }
 
   // Shared key map for requirement stat types → charData.stats key
   const STAT_KEY_MAP = { Magic:'magic', Strength:'strength', Dexterity:'dexterity', Vitality:'vitality' };
+
+  /**
+   * Returns true if the current character meets all requirements on this item.
+   * Checks class + stat requirements derived from affixLines by buildAffixLines.
+   */
+  function itemReqsMet(item, data) {
+    if (!data) return true;
+    const { reqLines } = filterAffixLines(item.affixLines || []);
+    const _cs = data.stats || {};
+    const _cl = data.level || 0;
+    for (const req of reqLines) {
+      if (req.name === 'Class') {
+        if (data.class !== String(req.value || '')) return false;
+        continue;
+      }
+      const reqNum  = parseInt(req.value) || 0;
+      const statKey = STAT_KEY_MAP[req.name];
+      const charVal = statKey ? (_cs[statKey] || 0) : _cl;
+      if (charVal < reqNum) return false;
+    }
+    return true;
+  }
 
   /**
    * Split raw affixLines into display lines and requirement lines,
@@ -1436,7 +1520,118 @@ document.addEventListener('DOMContentLoaded', () => {
       if (ln.name && /\bItem Set\b/i.test(ln.name))  { continue; }
       displayLines.push(ln);
     }
-    return { displayLines, reqLines };
+    return { displayLines: sortAffixLines(displayLines), reqLines };
+  }
+
+  /**
+   * Sort affix display lines into canonical order matching in-game display.
+   * Bucket reference:
+   *   0  — Imbue (_html or text containing 'imbued')
+   *   1  — Attack Speed, Cast Speed
+   *   2  — Flat Weapon Damage
+   *   3  — % Weapon Damage
+   *   4  — Elemental additive damage (Fire Damage %, etc.)
+   *  10  — Penetration
+   *  15  — All/per-element Crit Chance
+   *  17  — Crit Resistance
+   *  20  — Elemental status Chance (Burn/Shock/Freeze/Bleed/Curse/Stun/Entangle Chance)
+   *  22  — Elemental status Duration
+   *  25  — Armor, Enhanced Armor
+   *  28  — Life, Mana (flat bonuses — excludes regen, steal, cost, find)
+   *  32  — Core attributes: Strength, Dexterity, Vitality, Magic, Stamina
+   *  36  — Regen (Mana Regen, Life Regen, Stamina Regen)
+   *  40  — Resistances, Damage Reduction
+   *  45  — Skill bonuses, Mana Cost reductions
+   *  50  — Structural (headers, flask props)
+   *  52  — Glyph chance and other generic utility chances
+   *  55  — Boolean trait text lines (Water Walking, Feather Falling, Flame Lash)
+   *  58  — Find stats, Life/Mana Steal, Knockback, Orb Drop
+   *  62  — On-hit proc effects (chance to Stun attacker on getting hit)
+   *  65  — Fallback
+   *  99  — Vow of Poverty
+   */
+  function sortAffixLines(lines) {
+    function affixOrder(ln) {
+      // Imbued lines always first
+      if (ln._html != null) return 0;
+      if (ln.text != null && typeof ln.text === 'string' && ln.text.toLowerCase().includes('imbued')) return 0;
+      // Vow of Poverty always last
+      if (ln.text != null && typeof ln.text === 'string' && ln.text === 'Vow of Poverty') return 99;
+      // Structural text (headers, flask props) — fixed position, preserve relative order
+      if (ln._header || ln.isFlaskProp) return 50;
+      // Boolean trait text lines (Water Walking, Feather Falling, Flame Lash, etc.)
+      // Come after attributes/find but before on-hit procs
+      if (ln.text != null) return 55;
+
+      const n = (ln.name || '').toLowerCase();
+      const v = String(ln.value || '');
+      const isPct = v.endsWith('%');
+
+      // 1 — Speed
+      if (n === 'attack speed' || n === 'cast speed') return 1;
+      if (n === 'movement speed') return 1;
+      // 2-3 — Weapon damage
+      if (n === 'weapon damage' && !isPct) return 2;
+      if (n === 'weapon damage' && isPct) return 3;
+      // 4 — Elemental additive damage (Fire Damage %, Cold Damage %, etc.)
+      if (/\bdamage\b/.test(n) && !/weapon/.test(n)) return 4;
+      // 10 — Penetration
+      if (/\bpenetrat/.test(n)) return 10;
+      // 15 — Crit Chance (all types and per-element)
+      if (/\bcrit(ical)?\s+(chance|chances)\b/.test(n) || /\ball\s+crit/.test(n)) return 15;
+      // 17 — Crit Resistance
+      if (/\bcrit(ical)?\s+resist/.test(n)) return 17;
+      // 20 — Elemental status Chance (Burn/Shock/Freeze/Bleed/Curse/Stun/Entangle + "Chance")
+      //      Exclude on-hit procs (contain "attacker" or "on getting hit")
+      if (/\b(burn|shock|freeze|bleed|curse|stun|entangle|acid|poison)\b/.test(n) &&
+          /\bchance\b/.test(n) && !/attacker/.test(n) && !/on getting hit/.test(n)) return 20;
+      // 22 — Elemental status Duration
+      if (/\b(burn|shock|freeze|bleed|curse|stun|entangle|acid|poison)\b/.test(n) &&
+          /\bduration\b/.test(n)) return 22;
+      // 25 — Armor (flat and %)
+      if (/\barmor\b/.test(n)) return 25;
+      // +Attack
+      if (/\battack\b/.test(n)) return 9;
+      // 34 — Life / Mana flat bonuses (exclude regen, steal, cost, find variants)
+      if (/\b(life|mana)\b/.test(n) && !/regen/.test(n) && !/steal/.test(n) && !/cost/.test(n) && !/find/.test(n)) return 34;
+      // 32 — Core attributes (Strength, Dexterity, Vitality, Stamina)
+      //if (/\b(strength|dexterity|vitality|stamina)\b/.test(n)) return 32;
+      if (/\b(strength)\b/.test(n)) return 30;
+      if (/\b(dexterity)\b/.test(n)) return 31;
+      if (/\b(vitality)\b/.test(n)) return 32;
+      if (/\b(stamina)\b/.test(n)) return 33;  
+      // 34 — Magic attribute — must exclude "magic find" and "magic steal" compound names
+      if (/\bmagic\b/.test(n) && !/find/.test(n) && !/steal/.test(n)) return 34;
+      // 36 — Regen stats
+      if (/\bregen\b/.test(n)) return 36;
+      // 40 — Resistance / Damage Reduction
+      if (/\bresist/.test(n) || /\bdamage reduction\b/.test(n)) return 40;
+      // Skill bonuses that don't include the word "skill" (e.g. "Shadow Walk",
+      // "Blood Lash") need explicit ordering.
+      if (n === 'shadow walk') return 45;
+      if (n === 'blood lash') return 45;
+      if (n === 'blood lash range') return 46;
+      if (n === 'blood lash critical duration') return 47;
+      // dash/stealth utility (before 58 find/steal/knockback)
+      if (/\bstealth\b/.test(n)) return 49;
+      if (/\bdash distance\b/.test(n) || /\bmovement\b/.test(n) && /\bdistance\b/.test(n)) return 50;
+      // 52 — Glyph chance and other generic utility chances
+      //      Elemental chances already caught at 20; on-hit procs caught at 62
+      if (/\bchance\b/.test(n) && !/attacker/.test(n) && !/on getting hit/.test(n)) return 52;
+      // 58 — Find stats, Life/Mana Steal, Knockback, Orb Drop
+      if (/\bfind\b/.test(n) || /\bstealing\b/.test(n) || /\bknockback\b/.test(n) || /\borb drop\b/.test(n)) return 58;
+      // 59 — Skill bonuses and Mana Cost reductions  
+      if (/\ball skills\b/.test(n) || /\bskills?\b/.test(n) || /\bmana cost\b/.test(n)) return 59;
+      // 62 — On-hit proc effects
+      if (/chance to.*attacker/.test(n) || /on getting hit/.test(n)) return 62;
+      // 65 — Fallback
+      return 65;
+    }
+    // Stable sort: preserve original insertion order within same bucket
+    return lines
+      .map((ln, i) => ({ ln, i, ord: affixOrder(ln) }))
+      .sort((a, b) => a.ord - b.ord || a.i - b.i)
+      .map(x => x.ln);
   }
 
   /**
@@ -1447,8 +1642,82 @@ document.addEventListener('DOMContentLoaded', () => {
    */
   function buildAffixRows(displayLines, dividerClass) {
     if (!displayLines.length) return '';
-    let h = '<div class="tip-divider' + (dividerClass ? ' ' + dividerClass : '') + '"></div>';
+
+    // ── Merge same-name affix lines (inherent + socketed → one line) ─────────
+    // Exception: Attack Speed on daggers stays separate (inherent vs socketed are
+    // shown individually). On staves they combine.
+    // Rule: merge lines sharing the same normalised name, accumulating numeric values.
+    // "Normalised name" strips 'Equipment ' prefix and ' Bonus' suffix for matching.
+    // Non-numeric lines (text, _html, _header, flask, req) are never merged.
+    const _isDaggerCtx = (typeof _currentItem !== 'undefined') &&
+      /(dagger|knife|bodkin|poignard|stabber|claw|shiver|grimalkin|flickerfang|emberthorn|sorcere|duskshear)/i
+        .test((_currentItem && _currentItem.name) || '');
+    // Build display context name from the first non-socketed weapon-damage line or item name
+    // (We don't have direct access to item here — use a closure var set just before call)
+
+    function _normName(n) {
+      return (n || '').replace(/^Equipment\s+/i,'').replace(/\s+Bonus$/i,'').trim().toLowerCase();
+    }
+    const _merged = [];
     for (const ln of displayLines) {
+      // Never merge structural/text lines
+      if (ln._header || ln.isFlaskProp || ln.text != null || ln._html != null || ln.isRequirement) {
+        _merged.push(ln); continue;
+      }
+      
+      const _rawStr = String(ln.value ?? '');
+      const _isPct  = _rawStr.includes('%');   // <- look at the original value
+      const _isRate = _rawStr.includes('/s');  // <- look at the original value
+      const _valStr = _rawStr.replace('%','').replace('/s','');
+      const _numVal = parseFloat(_valStr);
+      if (isNaN(_numVal)) { _merged.push(ln); continue; }
+
+      const _nname = _normName(ln.name);
+
+      // Dagger attack speed exception: inherent (non-socketed) and socketed stay separate
+      const _isAtkSpd = _nname === 'attack speed';
+      if (_isAtkSpd && _isDaggerCtx) { _merged.push(ln); continue; }
+
+      // Find existing mergeable line with same normalised name
+      const _existIdx = _merged.findIndex(x => {
+        if (x._header || x.isFlaskProp || x.text != null || x._html != null || x.isRequirement) return false;
+        // Dagger atk speed: never merge regardless of socketed flag (already handled above)
+        if (_isAtkSpd && _isDaggerCtx) return false;
+        if (_normName(x.name) !== _nname) return false;
+        
+        const _xRaw  = String(x.value ?? '');
+        const _xPct   = _xRaw.includes('%');
+        const _xRate  = _xRaw.includes('/s');
+        const _xStr  = _xRaw.replace('%','').replace('/s','');
+        const _xVal   = parseFloat(_xStr);
+        if (isNaN(_xVal)) return false;
+        return _xPct === _isPct && _xRate === _isRate; // flat+flat, pct+pct, rate+rate
+      });
+
+      if (_existIdx >= 0) {
+        const _exStr   = String(_merged[_existIdx].value ?? '');
+        const _exVal   = parseFloat(_exStr.replace('%','').replace('/s',''));
+        const _hasPct  = _exStr.includes('%');
+        const _hasRate = _exStr.includes('/s');
+        if (!isNaN(_exVal)) {
+          const _sum = Math.round((_exVal + _numVal) * 100) / 100;
+          // Keep the non-socketed entry's metadata (name, bullet style) — prefer inherent
+          const _base = _merged[_existIdx].socketed && !ln.socketed ? ln : _merged[_existIdx];
+          _merged[_existIdx] = {
+            ..._base,
+            value: _sum + (_hasPct ? '%' : _hasRate ? '/s' : ''),
+            // If merged from different sources, mark as non-socketed so bullet is white
+            socketed: _merged[_existIdx].socketed && ln.socketed,
+          };
+          continue;
+        }
+      }
+      _merged.push(ln);
+    }
+    let h = '<div class="tip-divider' + (dividerClass ? ' ' + dividerClass : '') + '"></div>';
+    // Stats that display as bare percentages without a leading '+' (multiplicative modifiers)
+    const _NO_PLUS_STATS = new Set(['Enhanced Armor']);
+    for (const ln of _merged) {
       if (ln._header) {
         h += '<div class="tip-affix-header" style="color:' + (ln.color || 'rgba(255,255,255,0.35)') + ';">' + esc(String(ln.text)) + '</div>';
         continue;
@@ -1477,19 +1746,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // ── Line text HTML ──
       let lineHtml;
-      if (ln.text != null) {
+      if (ln._html != null) {
+        // Pre-rendered HTML (e.g. imbue line) — bypass colorElements to avoid double icons
+        lineHtml = '<span class="tip-affix-line">' + ln._html + '</span>';
+      } else if (ln.text != null) {
         lineHtml = '<span class="tip-affix-line" style="color:' + (ln.color || '#e2e8f0') + ';">' + colorElements(esc(String(ln.text))) + '</span>';
       } else if (ln.isFlaskProp) {
         lineHtml = '<span class="tip-affix-line tip-affix-flask">' + esc(ln.name) + '</span>';
       } else if (isSockLine) {
         // Text stays white — only the bullet is coloured. Element keywords in value/name still get coloured.
+        const _sv = String(ln.value ?? '');
+        const _svPfx = (_NO_PLUS_STATS.has(ln.name || '') || _sv.startsWith('+') || _sv.startsWith('-') || _sv.startsWith('0')) ? '' : '+';
         lineHtml = '<span class="tip-affix-line">' +
-          '<span class="tip-affix-val">' + colorElements(esc(String(ln.value ?? ''))) + '</span>' +
+          '<span class="tip-affix-val" style="color:#E8C342;">' + colorElements(esc(_svPfx + _sv)) + '</span>' +
           '<span class="tip-affix-name">' + colorElements(esc(ln.name ? ' ' + ln.name : '')) + '</span>' +
           '</span>';
       } else {
+        const _rv = String(ln.value ?? '');
+        const _rPfx = (_NO_PLUS_STATS.has(ln.name || '') || _rv.startsWith('+') || _rv.startsWith('-')) ? '' : '+';
         lineHtml = '<span class="tip-affix-line">' +
-          '<span class="tip-affix-val">' + colorElements(esc('+' + String(ln.value ?? ''))) + '</span>' +
+          '<span class="tip-affix-val" style="color:#E8C342;">' + colorElements(esc(_rPfx + _rv)) + '</span>' +
           '<span class="tip-affix-name">' + colorElements(esc(ln.name ? ' ' + ln.name : '')) + '</span>' +
           '</span>';
       }
@@ -1516,17 +1792,35 @@ document.addEventListener('DOMContentLoaded', () => {
       'a3f14410163b5bc42b72e51ad9a4bc8e': 'Dexterity',
       'cf6a5e41fac71de48b7fc87aa12ab252': 'Magic',
     };
-    const _tomeAttr = _isTome && item.tomeReqAttrProto ? (_TOME_ATTR_PROTO[item.tomeReqAttrProto] || null) : null;
-    const hasAny = reqLines.length > 0 || (item && item.heartIsUniqueSocket) || _isTome;
+    let _tomeAttr = item && item.tomeReqAttrProto ? (_TOME_ATTR_PROTO[item.tomeReqAttrProto] || null) : null;
+    // Fallback: some saves use different GUIDs for the same attribute requirement.
+    if (!_tomeAttr && item && item.tomeReqAttrProto) {
+      const raw = (DH_GUIDS[item.tomeReqAttrProto] || '');
+      if (/magic/i.test(raw)) _tomeAttr = 'Magic';
+      else if (/vitality/i.test(raw)) _tomeAttr = 'Vitality';
+      else if (/strength/i.test(raw)) _tomeAttr = 'Strength';
+      else if (/dexterity/i.test(raw)) _tomeAttr = 'Dexterity';
+    }
+    const hasAny = reqLines.length > 0 || (item && item.heartIsUniqueSocket) || _isTome || (item && item.tomeReqValue);
     if (!hasAny) return '';
 
     const _cStats = _currentCharData?.stats || {};
     const _cLevel = _currentCharData?.level || 0;
     let h = '<div class="tip-req-block"><div class="tip-req-label">Requires:</div>';
     for (const req of reqLines) {
+      // Class requirement: name='Class', value='Witch'
+      if (req.name === 'Class') {
+        const _reqClass = String(req.value || '');
+        const _charClass = _currentCharData?.class || '';
+        const _classMet = !_reqClass || _charClass === _reqClass;
+        h += '<div class="tip-req-row"><span style="color:' + (_classMet ? '#eee' : '#ef4444') + ';">' + esc(_reqClass) + '</span></div>';
+        continue;
+      }
       const valStr   = String(req.value || '');
       const _qMatch  = valStr.match(/^(\d+)\s*\((.+?)\)$/);
-      let reqType = 'Level', reqNum = parseInt(valStr) || 0;
+      // req.name is the attribute type (e.g. 'Magic', 'Level', 'Strength') emitted by the parser.
+      // Fall back to parsing the value string for legacy "(N Type)" format.
+      let reqType = req.name || 'Level', reqNum = parseInt(valStr) || 0;
       if (_qMatch) { reqNum = parseInt(_qMatch[1]); reqType = _qMatch[2]; }
       const _statKey = STAT_KEY_MAP[reqType];
       const _charVal = _statKey ? (_cStats[_statKey] || 0) : _cLevel;
@@ -1535,11 +1829,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (item && item.heartIsUniqueSocket)
       h += '<div class="tip-req-row"><span style="color:#d4a847;">Unique Socket</span></div>';
-    if (_isTome && _tomeAttr && item.tomeReqValue) {
+    // Attribute requirement from STAT_REQ_BASE — applies to equipment AND tomes
+    if (_tomeAttr && item.tomeReqValue) {
       const _charAttrVal = _cStats[STAT_KEY_MAP[_tomeAttr] || ''] || 0;
       const _reqMet = _charAttrVal >= item.tomeReqValue;
       h += '<div class="tip-req-row"><span style="color:' + (_reqMet ? '#eee' : '#ef4444') + ';">' + esc(_tomeAttr) + ' ' + item.tomeReqValue + '</span></div>';
     }
+    // "Usable once" notice only applies to tomes
     if (_isTome)
       h += '<div class="tip-req-row"><span style="color:#ef4444;">Usable once per character</span></div>';
     h += '</div>';
@@ -1622,26 +1918,296 @@ document.addEventListener('DOMContentLoaded', () => {
         '</div>';
     }
 
-    // ── Primary stat: armor / damage — included in header so image spans full pre-divider height ──
+    // ── Primary stat: armor / damage ────────────────────────────────────────────
     if (item.damageMin != null) {
+      const ELEM_COLORS_TIP = { Fire:'#f87171', Shadow:'#c084fc', Cold:'#93c5fd', Lightning:'#fde047', Nature:'#86efac', Slashing:'#d4b8a0', Blunt:'#c9a87c' };
+      const ELEM_ICONS_TIP  = { Fire:'🔥', Shadow:'🌑', Cold:'❄️', Lightning:'⚡', Nature:'🌿', Slashing:'⚔️', Blunt:'🔨' };
+
+      // ── Base attack speeds (attacks/second) ────────────────────────────────
+      // Sourced from items.js BASE_ITEMS[].baseSpeed where available; fallback table here.
+      const WEAPON_BASE_SPEEDS = {
+        // User-confirmed Attacks/s values. Attack speed affixes do NOT modify these.
+        // Legendaries use their base weapon type speed.
+        // 'the golden bough':1.159,
+        // Common types
+        'sword':1.3, 'axe':1.1, 'mace':0.9, 'tyrant':0.9, 
+        'wand':1.3, 'crystal shard':1.111111111,
+        // Staves (longest key matched first by sort)
+        'staff':1.111111111,
+        // pickaxes
+        'pick axe':0.77,
+      };
+      // Look up base speed: longest matching key wins (more specific before generic)
+      const _dispName = resolveItemDisplayName(item);    
+      const _nameKey = (item.name || '').toLowerCase();
+
+      // 1. BASE_ITEMS override by display name (includes The Golden Bough baseSpeed: 1.159)
+      let _baseSpd = null;
+      if (window.BASE_ITEMS) {
+        const _bi = window.BASE_ITEMS.find(
+          _b => _b.name === _dispName && typeof _b.baseSpeed === 'number'
+        );
+        if (_bi) _baseSpd = _bi.baseSpeed;
+      }
+
+      // 2. Parser baseSpeed (material type, e.g. Bramble Staff → 1.03)
+      if (_baseSpd === null) {
+        _baseSpd = (typeof item.baseSpeed === 'number') ? item.baseSpeed : null;
+      }
+
+      // 3. WEAPON_BASE_SPEEDS fallback (name-based, longest key first)
+      if (_baseSpd === null) {
+        const _wbsKeys = Object.keys(WEAPON_BASE_SPEEDS).sort((_a, _b) => _b.length - _a.length);
+        for (const _k of _wbsKeys) {
+          if (_nameKey === _k || _nameKey.includes(_k)) {
+            _baseSpd = WEAPON_BASE_SPEEDS[_k];
+            break;
+          }
+        }
+      }
+
+      // 4. Slot fallback
+      if (_baseSpd === null) {
+        const _slt = (item.slot || '').toLowerCase();
+        if (/twohand/.test(_slt))               _baseSpd = 1.11;
+        else if (/hand_right|mainhand/.test(_slt)) _baseSpd = 1.2;
+      }
+
+      /*
+      // First try items.js baseSpeed if present on item (populated by parser from BASE_ITEMS)
+      let _baseSpd = (typeof item.baseSpeed === 'number') ? item.baseSpeed : null;
+      if (_baseSpd === null) {
+        // Sort keys longest-first so 'crystal shard staff' beats 'crystal shard' and 'staff'
+        const _keys = Object.keys(WEAPON_BASE_SPEEDS).sort((a,b) => b.length - a.length);
+        for (const k of _keys) {
+          if (_nameKey === k || _nameKey.includes(k)) { _baseSpd = WEAPON_BASE_SPEEDS[k]; break; }
+        }
+      }
+      // Slot fallback
+      if (_baseSpd === null) {
+        const _slt = (item.slot || '').toLowerCase();
+        if (/twohand/.test(_slt))              _baseSpd = 1.11;
+        else if (/hand_right|mainhand/.test(_slt)) _baseSpd = 1.2;
+      }
+      */
+      // ── Primary damage: (base + flat) * (1 + pct%) ───────────────────────
+      let _dmgFlat = 0, _dmgPct = 0;
+      for (const _al of (item.affixLines || [])) {
+        if (!_al.name || _al.isRequirement || _al._html != null) continue;
+        const _alName = (_al.name || '').toLowerCase();
+        const _alVal  = parseFloat(String(_al.value || '').replace('%','')) || 0;
+        if (_alName === 'weapon damage') {
+          if (String(_al.value||'').includes('%')) _dmgPct += _alVal;
+          else _dmgFlat += _alVal;
+        }
+      }
+      const _calcMinExact = (item.damageMin + _dmgFlat) * (1 + _dmgPct / 100);
+      const _calcMaxExact = (item.damageMax + _dmgFlat) * (1 + _dmgPct / 100);
+      // Round half-up (standard game rounding) using Math.round for reliable integer results
+      const _calcMin = Math.round(_calcMinExact);
+      const _calcMax = Math.round(_calcMaxExact);
       const _dmgElem = item.damageType;
-      const ELEM_COLORS_TIP = { Fire:'#f87171', Shadow:'#c084fc', Cold:'#93c5fd', Lightning:'#fde047', Nature:'#86efac' };
-      const _dmgCol = (_dmgElem && ELEM_COLORS_TIP[_dmgElem]) ? ELEM_COLORS_TIP[_dmgElem] : '#f8d08a';
-      _headerHtml +=
-        '<div class="tip-dmg-row">' +
-        '<span class="tip-dmg-icon">⚔</span>' +
-        '<span class="tip-dmg-val" style="color:' + _dmgCol + ';">' +
-        item.damageMin + '–' + item.damageMax +
-        (_dmgElem ? ' <span class="tip-dmg-elem" style="color:' + _dmgCol + ';">(' + esc(_dmgElem) + ')</span>' : '') +
-        '</span></div>';
+      const _dmgCol  = (_dmgElem && ELEM_COLORS_TIP[_dmgElem]) ? ELEM_COLORS_TIP[_dmgElem] : '#f8d08a';
+      const _dmgIcon = (_dmgElem && ELEM_ICONS_TIP[_dmgElem])  ? ELEM_ICONS_TIP[_dmgElem]  : '';
+
+
+      // ── Secondary elemental damage lines ─────────────────────────────────
+      const ELEM_NAMES = new Set(['Fire Damage','Cold Damage','Lightning Damage','Shadow Damage','Nature Damage','Slashing Damage','Blunt Damage']);
+      const _elemDmgLines = [];
+      for (const ln of (item.affixLines || [])) {
+        if (!ln.name || !ELEM_NAMES.has(ln.name)) continue;
+        const _pct = parseFloat(String(ln.value || '').replace('%',''));
+        if (isNaN(_pct) || _pct <= 0) continue;
+        const _elem = ln.name.replace(' Damage','');
+        const _eMinExact = item.damageMin * _pct / 100;
+        const _eMaxExact = item.damageMax * _pct / 100;
+        _elemDmgLines.push({
+          elem: _elem,
+          minExact: _eMinExact,
+          maxExact: _eMaxExact,
+          min: Math.round(_eMinExact),
+          max: Math.round(_eMaxExact),
+        });
+      }
+
+// ── Attack speed: base + affix bonuses ───────────────────────────────
+// Daggers: only SOCKETED attack speed affects effective speed.
+// Staves/others: all attack speed (inherent + socketed) affects effective speed.
+
+const _isDagger = /(dagger|knife|bodkin|poignard|stabber|claw|shiver|grimalkin|flickerfang|emberthorn|sorcere|duskshear)/i
+  .test(item.name || '');
+
+const _isStaff = item.slot === 'twohand' || /staff|pike/i.test(item.name);
+
+// Staves: gate — true only if at least one socketed line contributes attack speed
+const _staffHasSocketAtkSpd = _isStaff && item.affixLines.some(_al =>
+  _al.name && _al.socketed && _al.name.toLowerCase() === 'attack speed'
+);
+
+let _atkSpdTotalEff = 0;
+for (const _al of item.affixLines) {
+  if (!_al.name || _al.isRequirement || _al._html != null) continue;
+  if (_al.name.toLowerCase() !== 'attack speed') continue;
+  const _av = parseFloat(String(_al.value).replace(',', '.')) || 0;
+  if (_isDagger) {
+    // Daggers: ONLY socketed attack speed counts, always
+    if (_al.socketed) _atkSpdTotalEff += _av;
+  } else if (_isStaff) {
+  if (_av < 0 && !_al.socketed) {
+    // Negative inherent penalty (e.g. Golden Bough): always subtract
+    _atkSpdTotalEff += _av;
+  } else if (_staffHasSocketAtkSpd) {
+    // Positive inherent + socketed: only if a socket with attack speed is present
+    _atkSpdTotalEff += _av;
+  }
+  } else {
+    // Everything else: all attack speed counts
+    _atkSpdTotalEff += _av;
+  }
+}
+
+// _baseSpd is already computed above from item.baseSpeed / WEAPON_BASE_SPEEDS.
+const _effSpd = (_baseSpd !== null)
+  ? _baseSpd * (1 + _atkSpdTotalEff / 100)
+  : null;
+const _effSpdDisp = _effSpd !== null ? parseFloat(_effSpd.toFixed(1)) : null;
+
+// ── DPS: average across all damage types × effective attack speed ─────
+// Use rounded min/max (primary + elemental), not the exact decimals.
+const _primaryAvg = (_calcMin + _calcMax) / 2;
+
+let _elemAvg = 0;
+for (const e of _elemDmgLines) {
+  _elemAvg += (e.min + e.max) / 2;
+}
+
+const _dpsAvgTotal = _primaryAvg + _elemAvg;
+
+// Final DPS rounded to 1 decimal internally, shown with 0/1 decimals in UI
+const _dps = (_effSpd !== null)
+  ? Math.round(_dpsAvgTotal * _effSpd * 10) / 10
+  : null;
+
+      // ── Render ────────────────────────────────────────────────────────────
+      if (_dps !== null) {
+        // DPS header row — sword icon white, value dark orange (#d4820a), larger font
+        _headerHtml +=
+          '<div class="tip-dmg-row tip-dps-row">' +
+          '<span class="tip-dmg-icon" style="color:#ffffff;">\u2694</span>' +
+          '<span class="tip-dmg-val tip-dps-val">' +
+          '<span style="color:#d4820a;">' + (_dps % 1 === 0 ? _dps.toFixed(0) : _dps.toFixed(1)) + '</span>' +
+          ' <span style="color:#d4820a;">Damage/s</span>' +
+          '</span></div>';
+
+        // Helper: build one sub-line (└ + range + element + Damage)
+        function _subRow(rangeHtml, elemHtml) {
+          return '<div class="tip-dmg-row tip-dmg-subrow">' +
+            '<span class="tip-dmg-indent" style="color:#ffffff;">\u2514</span>' +
+            '<span class="tip-dmg-subval">' + rangeHtml + elemHtml +
+            ' <span style="color:#e2e8f0;">Damage</span></span>' +
+            '</div>';
+        }
+
+        // Primary damage sub-line
+        const _pRange = '<span style="color:' + (_dmgElem ? _dmgCol : '#93c5fd') + ';">' + _calcMin + '\u2013' + _calcMax + '</span>';
+        const _pElem  = _dmgElem
+          ? ' <span style="color:' + _dmgCol + ';">' + esc(_dmgElem) + '</span>' +
+            (_dmgIcon ? ' <span style="color:#e2e8f0;">(</span><span style="color:' + _dmgCol + ';">' + _dmgIcon + '</span><span style="color:#e2e8f0;">)</span>' : '')
+          : '';
+        _headerHtml += _subRow(_pRange, _pElem);
+
+        // Elemental bonus damage sub-lines
+        for (const e of _elemDmgLines) {
+          const _ec = ELEM_COLORS_TIP[e.elem] || '#f8d08a';
+          const _ei = ELEM_ICONS_TIP[e.elem]  || '';
+          const _eRange = '<span style="color:' + _ec + ';">' + e.min + '\u2013' + e.max + '</span>';
+          const _eElem  = ' <span style="color:' + _ec + ';">' + esc(e.elem) + '</span>' +
+            (_ei ? ' <span style="color:#e2e8f0;">(</span><span style="color:' + _ec + ';">' + _ei + '</span><span style="color:#e2e8f0;">)</span>' : '');
+          _headerHtml += _subRow(_eRange, _eElem);
+        }
+
+        // Attacks/s sub-line: yellow number, white label
+        _headerHtml +=
+          '<div class="tip-dmg-row tip-dmg-subrow">' +
+          '<span class="tip-dmg-indent" style="color:#ffffff;">\u2514</span>' +
+          '<span class="tip-dmg-subval">' +
+          '<span style="color:#E8C342;">' + _effSpdDisp.toFixed(1) + '</span>' +
+          ' <span style="color:#e2e8f0;">Attacks/s</span>' +
+          '</span></div>';
+
+      } else {
+        // No speed data — single damage row (no DPS)
+        _headerHtml +=
+          '<div class="tip-dmg-row">' +
+          '<span class="tip-dmg-icon" style="color:#ffffff;">\u2694</span>' +
+          '<span class="tip-dmg-val tip-dps-val">' +
+          '<span style="color:' + (_dmgElem ? _dmgCol : '#93c5fd') + ';">' + _calcMin + '\u2013' + _calcMax + '</span>' +
+          (_dmgElem
+            ? ' <span style="color:' + _dmgCol + ';">' + esc(_dmgElem) + '</span>' +
+              (_dmgIcon ? ' <span style="color:#e2e8f0;">(</span><span style="color:' + _dmgCol + ';">' + _dmgIcon + '</span><span style="color:#e2e8f0;">)</span>' : '')
+            : '') +
+          ' <span style="color:#e2e8f0;">Damage</span>' +
+          '</span></div>';
+      }
     }
-    if (item.armor)
-      _headerHtml += '<div class="tip-armor-row"><span class="tip-armor-icon">🛡</span><span class="tip-armor-val">' + item.armor + ' Armor</span></div>';
+    if (item.armor) {
+      // Derive total armor from affixLines — include socketed armor bonuses in total.
+      // Enhanced Armor (%) applies only to base+flat affix armor, not to socketed flat.
+      let _armorFlat = 0, _armorPct = 0, _armorSockFlat = 0;
+      for (const _al of (item.affixLines || [])) {
+        if (!_al.name || _al.isRequirement || _al._html != null) continue;
+        const _aln = (_al.name || '').toLowerCase();
+        const _alv = parseFloat(String(_al.value || '').replace('%','')) || 0;
+        if (_aln === 'armor') {
+          if (_al.socketed) _armorSockFlat += _alv;
+          else _armorFlat += _alv;
+        } else if (_aln === 'enhanced armor' && !_al.socketed) {
+          _armorPct += _alv;
+        }
+      }
+      const _totalArmor = Math.round((item.armor + _armorFlat) * (1 + _armorPct / 100)) + _armorSockFlat;
+      _headerHtml += '<div class="tip-armor-row"><span class="tip-armor-icon">🛡</span><span class="tip-armor-val">' + _totalArmor + ' Armor</span></div>';
+    }
 
     // Image spans name + subtitle + dye + armor/damage — all pre-divider content
     let h = buildTipImg(_tipImgSrc, _headerHtml, _tipImgClass);
     // ── Affixes ────────────────────────────────────────────────────────
     const _affixLines = [...(item.affixLines||[])];
+    // Item-specific tooltip normalization (fixes label + units + ordering)
+    if (item.legendaryName === 'Legendary Belt03') { // War Goddess's Girdle
+      for (const ln of _affixLines) {
+        // Parser emits "Slashing Damage Percent" with value lacking "%".
+        if (ln.name === 'Slashing Damage Percent') {
+          ln.name = 'Slashing Damage';
+          const v = String(ln.value ?? '').trim();
+          if (!v.endsWith('%')) ln.value = v + '%';
+        }
+        // Parser emits range as raw integer; UI expects meters.
+        if (ln.name === 'Blood Lash Range') {
+          ln.name = 'Blood Lash range';
+          ln.value = String(ln.value ?? '').trim() + 'm';
+        }
+        // Parser currently treats this as generic Burn Duration; War Goddess expects
+        // it to be labeled as Blood Lash Critical Duration.
+        if (ln.name === 'Burn Duration') {
+          ln.name = 'Blood Lash Critical Duration';
+        }
+      }
+    }
+    // Elemental imbue — first affix line when weapon has non-physical damage type
+    const _PHYSICAL_TYPES = new Set(['Blunt','Slashing']);
+    if (item.damageType && !_PHYSICAL_TYPES.has(item.damageType)) {
+      const _imbueIcons  = { Fire:'🔥', Shadow:'🌑', Cold:'❄️', Lightning:'⚡', Nature:'🌿' };
+      const _imbueColors = { Fire:'#fa8072', Shadow:'#c084fc', Cold:'#93c5fd', Lightning:'#fde047', Nature:'#86efac' };
+      const _iIcon  = _imbueIcons[item.damageType]  || '';
+      const _iColor = _imbueColors[item.damageType] || '#e2e8f0';
+      // Use _html to bypass colorElements (which would add a second icon to the element word)
+      const _imbueHtml =
+        '<span style="color:' + _iColor + ';">' + esc(item.damageType) + '</span>' +
+        (_iIcon ? ' <span style="color:#e2e8f0;">(</span><span style="color:' + _iColor + ';">' + _iIcon + '</span><span style="color:#e2e8f0;">)</span>' : '') +
+        ' <span style="color:#e2e8f0;">Imbued</span>';
+      _affixLines.unshift({ _html: _imbueHtml });
+    }
     if (item.runeNum && !_affixLines.length) {
       // Stash rune tooltip: built from RUNE_DATA in rune_recipes.js
       const _tattooEffect = RUNE_DATA.tattoo_effect[item.runeNum];
@@ -1656,6 +2222,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
     const { displayLines: _displayLines, reqLines: _reqLines } = filterAffixLines(_affixLines);
+    // Expose item to buildAffixRows for dagger attack-speed merge exception
+    _currentItem = item;
     h += buildAffixRows(_displayLines, item._tipDividerClass || '');
     h += buildSockRow(item);
     h += buildReqBlock(_reqLines, item);
@@ -1666,7 +2234,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── Flavour text for legendaries ─────────────────────────────────
     if (isLeg && item.legendaryName) {
       const cat = typeof legCatalogue !== 'undefined' ? legCatalogue[item.legendaryName] : null;
-      const flavour = cat && cat.flavour;
+      const flavour = cat && cat.def?.flavour;
       if (flavour) {
         h += '<div class="tip-divider"></div>';
         h += '<div class="tip-flavour">' + esc(flavour) + '</div>';
@@ -2043,8 +2611,8 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         const isLeg = !!item.legendaryName;
         const rc    = RARITY_COLOR[item.rarity] || RARITY_COLOR['Common'];
-        const cellBg = item.tomeUsed ? 'rgb(180,30,30)' : isLeg ? 'rgb(201,120,76)' : rc;
-        const bord   = item.tomeUsed ? '#b01010' : isLeg ? '#c9784c' : rc;
+        const cellBg = (item.tomeUsed || !itemReqsMet(item, _currentCharData)) ? 'rgb(180,30,30)' : isLeg ? 'rgb(201,120,76)' : rc;
+        const bord   = (item.tomeUsed || !itemReqsMet(item, _currentCharData)) ? '#b01010' : isLeg ? '#c9784c' : rc;
         cell.classList.add('dh-pd-cell--item', 'dh-item-hover');
         if (isLeg) cell.classList.add('dh-pd-cell--leg');
         cell.style.cssText += '--cell-bg:' + cellBg + ';background:transparent;border:1px solid ' + bord + ';';
@@ -2439,10 +3007,11 @@ document.addEventListener('DOMContentLoaded', () => {
         cell.style.background = 'transparent';
         cell.style.border     = '1px solid ' + (HEART_BD[item.heartRarity] || HEART_BD.Common);
       } else {
-        const _cellBg = item.tomeUsed ? 'rgb(180,30,30)' : isLeg ? 'rgb(201,120,76)' : rc;
+        const _reqsMet = itemReqsMet(item, _currentCharData);
+        const _cellBg = (item.tomeUsed || !_reqsMet) ? 'rgb(180,30,30)' : isLeg ? 'rgb(201,120,76)' : rc;
         cell.style.setProperty('--cell-bg', _cellBg);
         cell.style.background = 'transparent';
-        cell.style.border = item.tomeUsed ? '1px solid #b01010' : isLeg ? '1px solid #c9784c' : '1px solid ' + rc;
+        cell.style.border = (item.tomeUsed || !_reqsMet) ? '1px solid #b01010' : isLeg ? '1px solid #c9784c' : '1px solid ' + rc;
       }
 
       // Helper: add stack-count badge (bottom-right corner) for qty >= 2
@@ -2663,7 +3232,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const rc    = RARITY_COLOR[item.rarity] || '#aaa';
         const dn    = resolveItemDisplayName(item);
         const row = document.createElement('div');
-        row.className = 'dh-list-row' + (isLeg ? ' dh-list-row--leg' : '');
+        const _listReqsMet = itemReqsMet(item, _currentCharData);
+        row.className = 'dh-list-row' + (isLeg ? ' dh-list-row--leg' : '') + (!_listReqsMet || item.tomeUsed ? ' dh-list-row--req-unmet' : '');
         const _dispType = getDisplayType(item);
         let _listImgSrc = null;
         let _listImgExtraStyle = '';

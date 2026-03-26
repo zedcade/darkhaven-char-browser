@@ -16,6 +16,7 @@
 // Each mob has multiple variant GUIDs so we key by name rather than GUID.
 // All variant GUIDs share the same DH_GUIDS string value.
 const _MOB_DISPLAY_NAMES = {
+  // ── Unique bosses ─────────────────────────────────────────────────────────
   'Barrow Knight 1H Slashing Unique Unit': 'Disgraced Paladin',
   'Bogie Feral Unique Unit':               'Rokkudokin',
   'Bogie Tyrant Unique Unit':              'Warren Chief',
@@ -27,6 +28,12 @@ const _MOB_DISPLAY_NAMES = {
   'Unique Bramblehusk Unit':               'Old Granddad',
   'Unique Deep Ones Unit':                 'Riptide Horror',
   'Leviathan Unique Unit':                 'Leviathan',
+  // ── Named champions — normalizeName() produces wrong output for these ─────
+  'Champion Baragon Unit':                 'Arb the Enslaver',
+  'Champion Burial Knight Unit':           'Esclados the Turncoat',
+  'Champion Gulpjaw Unit':                 'Sizzle Bough',
+  'Tunnel Thug Unit':                      'Babanikku',
+  // Salazar and Clonus Horror: normalizeName strips "Champion " prefix correctly
 };
 
 // Heart source monster BA name → base display name (prefix added based on blueprint rarity)
@@ -175,6 +182,13 @@ const AFFIX_STAT_ALWAYS_SKIP = new Set([
   '827e9d066c8d3764b84236e658d7b227', // Drop Orb On Kill Behavior
   '451c001d1f78ae8408c12934cc48ce07', // Wardrobe Garment Stat
   'e0ed6cff34fb2f5408d9ce980894a613', // Item Set Stat
+  'a38dce2c0148d994ea28328693a90f02', // Vow of Poverty On Remove Behavior (client bug, always 1)
+  '9f4877f16379b6745886646431cee637', // Proc OnRemove Stat
+  // Weapon base damage stats — shown in damage header, not as affix lines
+  STAT_GUIDS.DMG_BASE_MIN,            // Equipment Damage Base Min
+  STAT_GUIDS.DMG_BASE_MAX,            // Equipment Damage Base Max
+  STAT_GUIDS.ARMOR_BASE,              // Armor Base — shown in armor header, not as affix line
+  // Note: Stun On Get Hit Behavior (2f499060) is NOT skipped — handled via STAT_DISPLAY_NAME
   STAT_GUIDS.LEVEL,
   STAT_GUIDS.QUALITY,
   STAT_GUIDS.SOCKETS,
@@ -187,6 +201,22 @@ const AFFIX_STAT_ALWAYS_SKIP = new Set([
   STAT_GUIDS.RARE_NAME,
   STAT_GUIDS.DMG_TYPE,     // shown as damageType on item, not as affix line
 ]);
+
+// Equipment stat GUIDs not in gamedata STAT_GUIDS — defined here if needed
+if (!STAT_GUIDS.EQUIP_DMG_PCT)  STAT_GUIDS.EQUIP_DMG_PCT  = 'd77c61182742087489cc6284edfe179d'; // Equipment Damage Percent Stat
+if (!STAT_GUIDS.EQUIP_ATK_SPD)  STAT_GUIDS.EQUIP_ATK_SPD  = '72a9c1d23b5aaa64bab15c8c5b7128fb'; // Attack Speed Multiplier Stat
+if (!STAT_GUIDS.EQUIP_DMG_FLAT) STAT_GUIDS.EQUIP_DMG_FLAT = '66621c6e3bf7cb74c88ad77c6016f5c4'; // Equipment Damage Bonus Stat (flat +N)
+
+// Stat GUIDs missing from DH_GUIDS (maxguids.js) — hardcoded display names.
+// buildAffixLines falls back to this map if resolveGuid() returns null so these
+// affixes are not silently dropped. Add entries here as new stats are discovered.
+const MISSING_STAT_GUIDS = {
+  // Entangle on-hit: stat GUID confirmed from Instrument Status Effect Chance.
+  // 'ad8ac39e4eebf5247a145a0883e59613': handled via normalizeName path (Instrument Status Effect Chance Deliver Target Stat)
+  // Elemental weapon damage bonus — +N% [Element] Damage, qualified by p0.prototype (element GUID)
+  'b1f73233ca8c7234a86158700f60b73b': 'Equipment Additional Elemental Damage Bonus',
+  '8eace18e1c23e584cb62b50c7536ae51': 'Equipment Additional Elemental Damage Bonus',
+};
 
 // ---------------------------------------------------------------------------
 // resolveSocketItemName() — pretty-print a socketed item's blueprint name
@@ -380,6 +410,11 @@ function getParam(obj, key, prop) {
   return obj?.[key]?.[prop] ?? null;
 }
 
+// Item-level requirement attribute prototype may be encoded on p0 or p1.
+function getReqAttrProto(stat) {
+  return stat?.params?.p0?.prototype || stat?.params?.p1?.prototype || null;
+}
+
 // ---------------------------------------------------------------------------
 // JSON repair
 // ---------------------------------------------------------------------------
@@ -441,35 +476,173 @@ function readStat(stat) {
   if (stat.string   !== undefined)                           return { type: 'string', value: stat.string };
   if (stat.prototype !== undefined)                          return { type: 'ref',    value: stat.prototype };
   if (stat.blueprint !== undefined)                          return { type: 'ref',    value: stat.blueprint };
+  // vector2: two fixed-point values (x = primary value e.g. proc chance, y = secondary/magnitude).
+  // Decode x as the primary value; the special-case handler in buildAffixLines reads y directly if needed.
+  if (stat.vector2 !== undefined && stat.vector2 !== null)   return { type: 'fixed',  value: Math.round(decodeFixed(String(stat.vector2.x)) * 100) / 100 };
   return { type: 'unknown', value: null };
 }
 
+// Element→status-effect name mapping for Crit Chance and similar stats
+const ELEM_TO_STATUS = {
+  Fire:      'Burn',
+  Lightning: 'Shock',
+  Cold:      'Freeze',
+  Shadow:    'Curse',
+  Blunt:     'Stun',
+  Slashing:  'Bleed',
+  Nature:    'Entangle',
+};
+
+// Skill display names: blueprint base name → player-facing name
+const SKILL_DISPLAY_NAMES = {
+  'Witch Blood Lash':          'Blood Lash',
+  'Witch Crows':               'Feast For Crows',
+  'Witch Crows Combat':        'Feast For Crows',
+  'Witch Glyph Lunge':         'Glyph Lunge',
+  'Witch Bone Spirit':         'Bone Spirit',
+  'Witch Shadow Walk':              'Shadow Walk',
+  'Witch Shadow Walk Skill Combat': 'Shadow Walk',
+  'Witch Spine Breaker':       'Spine Breaker',
+  'Witch Bone Storm':          'Bone Storm',
+};
+
+// Boolean stats: display as text-only (no value prefix)
+// Format: { text, color }  — color is the line colour
+
+// ---------------------------------------------------------------------------
+// _pushWitchSkillStat() — shared handler for "+N to [Witch Skill]" stats.
+// Used for both cf4be72 (p0.blueprint) and 4267c6 (p0.prototype) when they
+// appear on item units directly (not on affix sub-units).
+// affixLines: item.affixLines array to push into.
+// ---------------------------------------------------------------------------
+function _pushWitchSkillStat(stat, affixLines) {
+  const _p0bp    = stat.params?.p0?.blueprint;
+  const _p0proto = stat.params?.p0?.prototype;
+  const _p1bp    = stat.params?.p1?.blueprint;
+  const _p1proto = stat.params?.p1?.prototype;
+  // Some saves store the actual Witch skill on p1 (randomized rolls on legendaries).
+  // Prefer p1 so we don't hardcode one skill.
+  const _guid    = _p1bp || _p1proto || _p0bp || _p0proto;
+  if (!_guid) return;
+  const { value: _sv } = readStat(stat);
+  if (typeof _sv !== 'number' || _sv <= 0) return;
+  const _rawName = normalizeName(DH_GUIDS[_guid] || '');
+  if (!_rawName.toLowerCase().startsWith('witch')) return;
+  // Resolve display name via SKILL_DISPLAY_NAMES
+  let _disp = SKILL_DISPLAY_NAMES[_rawName] || null;
+  if (!_disp) {
+    const _s = _rawName.replace(/\s+Skill\s+(Combat|Branch|Option|Tree|Mechanics)\s*$/i,'').replace(/\s+Skill\s*$/i,'').trim();
+    _disp = SKILL_DISPLAY_NAMES[_s] || null;
+  }
+  if (!_disp) {
+    for (const [k, v] of Object.entries(SKILL_DISPLAY_NAMES)) {
+      if (_rawName.startsWith(k)) { _disp = v; break; }
+    }
+  }
+  affixLines.push({ name: _disp || _rawName, value: String(_sv) });
+  // Emit class requirement once per item
+  if (!affixLines.some(l => l.isRequirement && l.name === 'Class'))
+    affixLines.push({ name: 'Class', value: 'Witch', isRequirement: true });
+}
+
+const BOOLEAN_STAT_DISPLAY = {
+  'Water Walking':     { text: 'Water Walking',   color: '#93c5fd' },
+  'Feather Falling':   { text: 'Feather Falling', color: '#93c5fd' },
+  'Vow of Poverty':    { text: 'Vow of Poverty',  color: '#86efac' },
+  // Flame Lash: rich text — colorElements handles Fire/Burn colouring
+  'Flame Lash':        { text: 'FLAME LASH — Your Blood Lash deals Fire damage and will often Burn enemies.', color: '#e2e8f0' },
+};
+
 // Friendly display-name overrides for verbose normalizeName() stat names
 const STAT_DISPLAY_NAME = {
-  'Equipment Damage Bonus':        'Damage Bonus',
-  'Equipment Damage Percent':      'Damage %',
-  'Equipment Armor Bonus':         'Armor Bonus',
-  'Equipment Armor Pct Bonus':     'Armor %',
+  // Damage
+  'Equipment Damage Bonus':            'Weapon Damage',
+  // Elemental damage roll on weapons (stored as long integer %)
+  'Equipment Additional Elemental Damage Bonus': 'Damage',
+  'Equipment Damage Percent':          'Weapon Damage',
+  'Damage Bonus':                      'Weapon Damage',
+  // Armor
+  'Equipment Armor Bonus':             'Armor',
+  'Equipment Armor Pct Bonus':         'Enhanced Armor',
+  'Armor Bonus':                       'Armor',
+  'Armor Pct Bonus':                   'Enhanced Armor',
+  // Speed
   'Equipment Attack Speed Multiplier': 'Attack Speed',
-  'Equipment Critical Duration':   'Crit Duration',
-  'Attack Speed Multiplier':       'Attack Speed',
-  'Movement Speed Multiplier':     'Move Speed',
-  'Health Bonus':                  'Life Bonus',
-  'Strength Bonus':                'Strength',
-  'Dexterity Bonus':               'Dexterity',
-  'Magic Bonus':                   'Magic',
-  'Vitality Bonus':                'Vitality',
-  'Mana Bonus':                    'Mana',
-  'Armor Bonus':                   'Armor',
-  'Armor Pct Bonus':               'Armor %',
-  'Critical Resistance':           'Crit Resistance',
-  'Critical Chance':               'Crit Chance',
-  'Critical Duration':             'Crit Duration',
-  'Faster Swim Speed':             'Swim Speed',
-  'Cast Speed Multiplier':         'Cast Speed',
-  'Damage Reduction':              'Dmg Reduction',
-  'Skill Level':                   '+All Skills',
+  'Attack Speed Multiplier':           'Attack Speed',
+  'Movement Speed Multiplier':         'Movement Speed',
+  'Dash Distance Multiplier':          'Dash Distance',
+  // Crit
+  'Equipment Critical Duration':       'Burn Duration',
+  'Equipment Critical Chance':         'Crit Chance',
+  'Critical Chance':                   'Crit Chance',
+  'Critical Duration':                 'Burn Duration',
+  'Critical Resistance':               'Crit Resistance',
+  'Critical Chance By Tag':            'Critical Chance',
+  'Critical Duration By Tag':          'Burn Duration',
+  'Critical Duration By Skill':        'Burn Duration',
+  // Attributes (strip "Bonus")
+  'Health Bonus':                      'Life',
+  'Strength Bonus':                    'Strength',
+  'Dexterity Bonus':                   'Dexterity',
+  'Magic Bonus':                       'Magic',
+  'Vitality Bonus':                    'Vitality',
+  'Mana Bonus':                        'Mana',
+  'Stamina Bonus':                     'Stamina',
+  // Defense
+  'Armor':                             'Armor',
+  'Resistance':                        'Resistances',
+  'Penetration':                       'Penetrate All Resistances',
+  'Damage Reduction':                  'Damage Reduction',
+  'Stealth':                           'Stealth',
+  // Cast/move
+  'Cast Speed Multiplier':             'Cast Speed',
+  'Faster Swim Speed':                 'Swim Speed',
+  // Mana Cost reduction per skill
+  'Cost Reduction Percent By Skill':   'Mana Cost',
+  // Skills
+  'Skill Level':                       'All Skills',
+  'Skill Level Bonus':                 'Skills',           // resolved via p0 blueprint → specific skill
+  'Skill Level Bonus Tag':             'Skills',           // resolved via p0 prototype → tag name
+  // Find / steal
+  'Life Steal':                        'Life Stealing',
+  'Mana Steal':                        'Mana Stealing',
+  'Magic Find':                        'Magic Find',
+  'Gold Find':                         'Gold Find',
+  'Proc OnKill':                       'Orb Drop on Kill',
+  'Find Health Orbs':                  'Find Life Orbs',
+  // Regen
+  'Mana Regen':                        'Mana Regen',
+  'Mana Regen Time':                   'Mana Regen',
+  'Health Regen':                      'Life Regen',
+  'Health Regen Time':                 'Life Regen',
+  // Booleans (values resolved via BOOLEAN_STAT_DISPLAY)
+  'Water Walking':                     'Water Walking',
+  'Feather Falling':                   'Feather Falling',
+  'Vow of Poverty Trait':              'Vow of Poverty',
+  // Special behaviors
+  'Stun On Get Hit':                   'chance to Stun attacker on getting hit',
+  'Stun On Get Hit Behavior':          'chance to Stun attacker on getting hit',
+  // Knockback
+  'Equipment Knockback':               'Knockback',
+  'Knockback':                         'Knockback',
+  'Glyph Lunge Knockback Skill Trait': 'Knockback with Glyph Lunge',
+  'Lunge Knockback':                   'Knockback with Glyph Lunge',
+  // Glyph
+  'Glyph Chance':                      'chance to form a Glyph',
+  'Glyph Lunge Knockback':             'Knockback with Glyph Lunge',  // Skill Trait qualifier stripped
+  'Random Witch Glyph Skill':          'chance to form a Glyph',
+  'Stability':                         'Stability',
+  // Stamina regen is stored as a multiplier fraction; displayed as N.N/s
+  'Stamina Regen Bonus Pct':           'Stamina Regen',
+  'Stamina Regen':                     'Stamina Regen',
+  // Proc-on-hit stats: name is generic 'Proc OnGetHIt', qualifier provides the specific effect
+  'Proc OnGetHIt':                     'chance to Stun attacker on getting hit',  // overridden by qualifier
 };
+
+// Stats whose fixed value should display as N.N/s (rate stats)
+const RATE_STATS = new Set(['Mana Regen', 'Mana Regen Time', 'Mana Regen Stat', 'Life Regen', 'Health Regen', 'Health Regen Time']);
+// Stamina Regen is stored as a fraction but the game displays it ×10 (0.2 → 2.0/s)
+const RATE10_STATS = new Set([]); // reserved for future N.N×10/s stats
 
 // Stats stored as fixed-point fractions — multiply × 100 to display as percent
 const MULT_STATS = new Set([
@@ -477,7 +650,45 @@ const MULT_STATS = new Set([
   'Movement Speed Multiplier', 'Equipment Damage Percent',
   'Equipment Armor Pct Bonus', 'Armor Pct Bonus',
   'Cast Speed Multiplier', 'Equipment Critical Duration',
-  'Critical Duration', 'Critical Chance', 'Damage Reduction',
+  'Critical Duration', 'Critical Chance',  // Damage Reduction removed from MULT_STATS — it's a flat long
+  'Proc OnKill', 'Mana Steal', 'Life Steal',
+  'Critical Duration By Tag', 'Critical Duration By Skill',
+  'Dash Distance Multiplier',     // stored as fixed fraction → ×100 = %
+  'Stun On Get Hit',              // stored as 0.1 → 10%
+  'Proc OnGetHIt',                // stored as fixed ~0.1 → 10% (Spearbreaker etc.)
+  'Stamina Regen Bonus Pct',      // stored as 0.2 fixed → ×100 = 20% Stamina Regen
+]);
+
+// Stats stored as plain integers that represent percentage values — append '%' without multiplying
+const PCT_SUFFIX_STATS = new Set([
+  // Damage & weapons
+  'Weapon Damage', 'Enhanced Armor',  // 'Damage Reduction' removed — stored as flat integer, no %
+  // Elemental weapon damage % lines — stored as flat integer, no %
+  // Offense
+  'Crit Chance', 'Critical Chance', 'Crit Resistance',
+  'Burn Duration', 'Stun Duration', 'Freeze Duration', 'Curse Duration', 'Bleed Duration', 'Entangle Duration', 'Shock Duration', 'Poison Duration', 'Acid Duration',
+  'Shock Chance', 'Burn Chance', 'Freeze Chance', 'Curse Chance', 'Stun Chance', 'Bleed Chance', 'Entangle Chance',
+  // Elemental weapon damage % lines
+  'Fire Damage', 'Cold Damage', 'Lightning Damage', 'Shadow Damage', 'Nature Damage', 'Blunt Damage', 'Slashing Damage', 'All Damage',
+  'All Critical Chances',
+  // Defense
+  'Resistances', 'All Resistances', 'All Resistance', 'Resistance',
+  'Penetrate All Resistances', 'Penetrate All Resistance', 'Penetration',
+  'Stealth',
+  // Find
+  'Magic Find', 'Gold Find', 'Orb Drop on Kill', 'Find Life Orbs',
+  // Steal
+  'Mana Stealing', 'Life Stealing',
+  'Mana Cost',
+  // Glyph
+  'chance to form a Glyph',
+  // Speed
+  'Attack Speed', 'Movement Speed', 'Dash Distance', 'Cast Speed', 'Swim Speed',
+  // Knockback on-hit
+  'chance to Stun attacker on getting hit',
+  'chance to Entangle on hit',  // Entangle On Hit
+  // Other %
+  'Stability', 'Crit Resistance', 'All Crit Resistance', 'All Critical Resistances',
 ]);
 
 // ---------------------------------------------------------------------------
@@ -486,37 +697,324 @@ const MULT_STATS = new Set([
 // ---------------------------------------------------------------------------
 function buildAffixLines(affixUnit) {
   const lines = [];
+  // Prototype → requirement type display name
+  const _REQ_PROTO_NAME = {
+    '58f688979805ad9448dd76c47394f635': 'Level',     // Level Stat
+    'cf5c6725d0622e94a8d9869526914357': 'Vitality',  // Vitality Stat
+    'fe2f09265d25eb5488ecd81b076fcf63': 'Strength',  // Strength Stat
+    'a3f14410163b5bc42b72e51ad9a4bc8e': 'Dexterity', // Dexterity Stat
+    'cf6a5e41fac71de48b7fc87aa12ab252': 'Magic',     // Magic Stat
+  };
+
   for (const h of affixUnit.stats?.data ?? []) {
+    // Handle class requirement — emitted as a requirement line "Requires: <Class>"
+    if (h.stat === CLASS_REQ_GUID || h.stat === '1539971ec81211142809acc81d4de918') {
+      // Collect all possible GUID candidates from every field/param
+      const _classBpCandidates = [
+        h.prototype,
+        h.blueprint,
+        getParam(h.params, 'p0', 'prototype'),
+        getParam(h.params, 'p0', 'blueprint'),
+        getParam(h.params, 'p1', 'prototype'),
+        getParam(h.params, 'p1', 'blueprint'),
+      ].filter(Boolean);
+      let _found = false;
+      if (typeof CLASS_CONFIG !== 'undefined') {
+        for (const _classBp of _classBpCandidates) {
+          for (const [cls, cfg] of Object.entries(CLASS_CONFIG)) {
+            if (cfg.blueprints && cfg.blueprints.includes(_classBp)) {
+              lines.push({ name: 'Class', value: cls, isRequirement: true });
+              _found = true;
+              break;
+            }
+          }
+          if (_found) break;
+          // Fallback: DH_GUIDS name contains class name
+          const _bpName = (DH_GUIDS[_classBp] || '').toLowerCase();
+          for (const cls of Object.keys(CLASS_CONFIG)) {
+            if (_bpName.includes(cls.toLowerCase())) {
+              lines.push({ name: 'Class', value: cls, isRequirement: true });
+              _found = true;
+              break;
+            }
+          }
+          if (_found) break;
+        }
+      }
+      continue;
+    }
+    // Handle stat requirements (Level N, Magic N, Strength N, etc.)
+    // STAT_REQ_BASE lives on affix units in the save file, not on the item unit.
+    // p0.prototype identifies the attribute type; long value is the threshold.
+    if (h.stat === STAT_GUIDS.STAT_REQ_BASE) {
+      const _reqProto = getParam(h.params, 'p0', 'prototype') || getParam(h.params, 'p1', 'prototype');
+      let _reqName  = _REQ_PROTO_NAME[_reqProto] || null;
+      if (!_reqName && _reqProto) {
+        // Fallback: some saves use different GUIDs for the same requirement type.
+        const _protoRaw = normalizeName(DH_GUIDS[_reqProto] || '');
+        if (/magic/i.test(_protoRaw))      _reqName = 'Magic';
+        else if (/level/i.test(_protoRaw)) _reqName = 'Level';
+        else if (/strength/i.test(_protoRaw)) _reqName = 'Strength';
+        else if (/dexterity/i.test(_protoRaw)) _reqName = 'Dexterity';
+        else if (/vitality/i.test(_protoRaw)) _reqName = 'Vitality';
+      }
+      const { value: _reqVal } = readStat(h);
+      if (_reqName && typeof _reqVal === 'number' && _reqVal > 0) {
+        lines.push({ name: _reqName, value: String(_reqVal), isRequirement: true });
+      }
+      continue;
+    }
     if (AFFIX_STAT_ALWAYS_SKIP.has(h.stat)) continue;
 
-    const name = resolveGuid(h.stat);
+    // ── Instrument Status Effect Chance Deliver Target (ad8ac39e...) ─────────
+    // vector2 stat: x = per-hit chance (0.11 = 11%), y = magnitude.
+    // p0.blueprint points to the status effect unit (e.g. "Entangle Status Effect Unit").
+    // Handled here before generic flow because display name is dynamically derived from blueprint.
+    if (h.stat === 'ad8ac39e4eebf5247a145a0883e59613' && h.vector2) {
+      const xVal      = decodeFixed(String(h.vector2.x));
+      const pct       = Math.round(xVal * 100);
+      if (!pct) continue;
+      const effectBp  = getParam(h.params, 'p0', 'blueprint');
+      const effectRaw = effectBp ? (DH_GUIDS[effectBp] || '') : '';
+      // Strip trailing "Status Effect Unit" to get bare effect name (e.g. "Entangle")
+      const effectName = effectRaw.replace(/\s*Status\s*Effect\s*(Unit)?\s*$/i, '').trim() || 'Status Effect';
+      lines.push({ text: `${pct}% chance to ${effectName} on hit` });
+      continue;
+    }
+
+    const name = resolveGuid(h.stat) || MISSING_STAT_GUIDS[h.stat] || null;
     if (!name) continue;
 
     const { type, value } = readStat(h);
-    let A = (type === 'fixed' && value === Math.round(value))
+    // Round only when the integer value is substantial (e.g. Mana 24.27 → 24).
+    // Do NOT round small fractions (Attack Speed 0.16) — those are % stats handled below.
+    const _isNearInt = type === 'fixed' && Math.abs(value) >= 1 && Math.abs(value - Math.round(value)) < 0.49;
+    let A = (_isNearInt || (type === 'fixed' && value === Math.round(value)))
               ? String(Math.round(value))
               : String(value ?? '');
 
-    // If value is a GUID ref and ba has it, resolve to display name
+    // If value is a GUID ref, resolve to display name
     if (type === 'ref' && typeof value === 'string' && DH_GUIDS[value]) {
       A = resolveGuid(value);
     }
 
-    // Append param qualifier — only p0.prototype (NOT p0.blueprint)
+    if (A === '' || A === 'null' || A === '0') continue;
+
+    // ── Resolve qualifier from p0 (prototype OR blueprint) ───────────────────
     const p0proto = getParam(h.params, 'p0', 'prototype');
-    if (p0proto && !AFFIX_STAT_ALWAYS_SKIP.has(p0proto)) {
-      const pname = resolveGuid(p0proto);
-      if (pname && !pname.endsWith('…')) A = `${A} (${pname})`;
+    const p0bp    = getParam(h.params, 'p0', 'blueprint');
+    const p1proto = getParam(h.params, 'p1', 'prototype');
+    const p1bp    = getParam(h.params, 'p1', 'blueprint');
+    let qualifier = null;
+    function _resolveSkillDisplayFromGuid(guid) {
+      if (!guid) return null;
+      const rawSkill = normalizeName(DH_GUIDS[guid] || '');
+      if (!rawSkill) return null;
+      // Direct lookup first
+      let _skillDisplay = SKILL_DISPLAY_NAMES[rawSkill];
+      if (!_skillDisplay) {
+        // Strip trailing Skill Combat/Branch/Option etc. and retry
+        const _stripped = rawSkill
+          .replace(/\s+Skill\s+(Combat|Branch|Option|Tree|Mechanics)\s*$/i, '')
+          .replace(/\s+Skill\s*$/i, '')
+          .trim();
+        _skillDisplay = SKILL_DISPLAY_NAMES[_stripped];
+      }
+      if (!_skillDisplay) {
+        // Prefix-match: find first SKILL_DISPLAY_NAMES key that rawSkill starts with
+        for (const [k, v] of Object.entries(SKILL_DISPLAY_NAMES)) {
+          if (rawSkill.startsWith(k)) { _skillDisplay = v; break; }
+        }
+      }
+      return _skillDisplay || null;
     }
 
-    if (A === '' || A === 'null' || A === '0') continue;
-    const displayName = STAT_DISPLAY_NAME[name] || name;
-    // Stats stored as 'fixed' decimal fraction (0.23) that should display as percent (23%)
-    // ONLY applies when readStat() returns type='fixed' — integers (type='long') are already in right unit
-    // (MULT_STATS defined at module level)
-    if (type === 'fixed' && MULT_STATS.has(name) && typeof value === 'number') {
-      // Stored as fraction: multiply by 100 and show as %
+    // Skill bonuses (e.g. "Shiver: +1 Witch Skill") are sometimes stored on p1
+    // rather than p0; prefer p1 for this stat so we don't hardcode to one skill.
+    if (name === 'Skill Level Bonus' || name === 'Skills') {
+      const _cands = [p1bp, p0bp, p1proto, p0proto].filter(Boolean);
+      for (const g of _cands) {
+        const _disp = _resolveSkillDisplayFromGuid(g);
+        if (_disp) { qualifier = _disp; break; }
+      }
+    }
+
+    if (qualifier == null) {
+      if (p0proto && !AFFIX_STAT_ALWAYS_SKIP.has(p0proto)) {
+        const pname = resolveGuid(p0proto);
+        if (pname && !pname.endsWith('…')) {
+          qualifier = pname
+            .replace(/\s*Damage\s*Type\s*$/i, '')
+            .replace(/\s+Skill\s+Trait\s*$/i, '')
+            .replace(/\s+Behavior\s*$/i, '')   // e.g. 'Stun On Get Hit Behavior' → 'Stun On Get Hit'
+            .replace(/(?<!Skill)\s+Trait\s*$/i, '') // 'Vow of Poverty Trait' → 'Vow of Poverty'
+            .trim();
+        }
+      } else if (p0bp) {
+        // p0.blueprint used for skill-specific bonuses (Falce di Luna "+3 Blood Lash" etc.)
+        const rawSkill = normalizeName(DH_GUIDS[p0bp] || '');
+        if (rawSkill) {
+          // Direct lookup first
+          let _skillDisplay = SKILL_DISPLAY_NAMES[rawSkill];
+          if (!_skillDisplay) {
+            // Strip trailing Skill Combat/Branch/Option etc. and retry
+            const _stripped = rawSkill
+              .replace(/\s+Skill\s+(Combat|Branch|Option|Tree|Mechanics)\s*$/i, '')
+              .replace(/\s+Skill\s*$/i, '')
+              .trim();
+            _skillDisplay = SKILL_DISPLAY_NAMES[_stripped];
+          }
+          if (!_skillDisplay) {
+            // Prefix-match: find first SKILL_DISPLAY_NAMES key that rawSkill starts with
+            for (const [k, v] of Object.entries(SKILL_DISPLAY_NAMES)) {
+              if (rawSkill.startsWith(k)) { _skillDisplay = v; break; }
+            }
+          }
+          qualifier = _skillDisplay || rawSkill || null;
+        } else {
+          qualifier = null;
+        }
+      }
+    }
+
+    let displayName = STAT_DISPLAY_NAME[name] || name;
+    const _baseDisplayName = displayName;
+
+    // Special boolean skill-trait affixes (Flame Lash, Charged Lunge, etc.)
+    if (name === 'Skill Trait' && qualifier) {
+      // Re-run STAT_DISPLAY_NAME on the qualifier to catch mapped entries (e.g. 'Glyph Chance' → 'Chance to form a Glyph')
+      displayName = STAT_DISPLAY_NAME[qualifier] || qualifier;
+      qualifier = null;
+    } else if (qualifier) {
+      const PURE_ELEMENTS = new Set(['Fire','Cold','Lightning','Shadow','Blunt','Slashing','Nature','All','Stun','Bleed']);
+
+      if (qualifier === 'All') {
+        if (_baseDisplayName === 'Crit Chance' || _baseDisplayName === 'Critical Chance') {
+          displayName = 'All Critical Chances';
+        } else if (_baseDisplayName === 'Crit Resistance' || _baseDisplayName === 'Critical Resistance') {
+          displayName = 'All Critical Resistances';
+        } else if (_baseDisplayName === 'Penetrate All Resistances' || _baseDisplayName === 'Penetration') {
+          displayName = 'Penetrate All Resistance';
+        } else if (_baseDisplayName === 'Resistances' || _baseDisplayName === 'Resistance') {
+          displayName = 'All Resistances';
+        } else if (_baseDisplayName === 'Damage Reduction') {
+          // Damage Reduction doesn't use "All" prefix — always just "Damage Reduction"
+          displayName = 'Damage Reduction';
+        } else {
+          displayName = 'All ' + _baseDisplayName;
+        }
+      } else if (PURE_ELEMENTS.has(qualifier)) {
+        // Crit Chance with element → status Chance (Fire→Burn Chance, Lightning→Shock Chance)
+        if (_baseDisplayName === 'Crit Chance' || _baseDisplayName === 'Critical Chance') {
+          const status = ELEM_TO_STATUS[qualifier] || qualifier;
+          displayName = status + ' Chance';
+        }
+        // Critical Duration with element qualifier → derive status duration name
+        else if (_baseDisplayName === 'Burn Duration') {
+          // e.g. Blunt → Stun Duration, Fire → Burn Duration, Lightning → Shock Duration
+          const _statusDur = ELEM_TO_STATUS[qualifier];
+          displayName = (_statusDur ? _statusDur : qualifier) + ' Duration';
+        }
+        // Penetration with specific element → "[Element] Penetration"
+        else if (_baseDisplayName === 'Penetrate All Resistances' || _baseDisplayName === 'Penetration') {
+          displayName = qualifier + ' Penetration';
+        }
+        // Default: prefix element name
+        else {
+          displayName = qualifier + ' ' + _baseDisplayName;
+        }
+      } else {
+        // Compound qualifier (e.g. "Shock Arcs") replaces generic stat name
+        // Exception: Mana Cost with skill qualifier → "Mana Cost: <Skill>"
+        if (_baseDisplayName === 'Mana Cost') {
+          // 'Mana' qualifier means p0.prototype is the mana stat, not the skill.
+          // Try p0.blueprint for the skill name instead.
+          // Find the skill name for this mana cost reduction.
+          // The skill may be stored in p0.blueprint, p1.blueprint, or p1.prototype.
+          function _resolveSkillName(bpGuid) {
+            if (!bpGuid) return null;
+            const _r = normalizeName(DH_GUIDS[bpGuid] || '');
+            if (!_r) return null;
+            let _s = SKILL_DISPLAY_NAMES[_r];
+            if (!_s) { const _t = _r.replace(/\s+Skill\s+(Combat|Branch|Option|Tree|Mechanics)\s*$/i,'').replace(/\s+Skill\s*$/i,'').trim(); _s = SKILL_DISPLAY_NAMES[_t]; }
+            if (!_s) { for (const [k,v] of Object.entries(SKILL_DISPLAY_NAMES)) { if (_r.startsWith(k)) { _s=v; break; } } }
+            return _s || null;
+          }
+          let _mcSkill = null;
+          // Try every param combination
+          const _mcP0Bp = getParam(h.params, 'p0', 'blueprint');
+          const _mcP1Bp = getParam(h.params, 'p1', 'blueprint');
+          const _mcP0Pr = getParam(h.params, 'p0', 'prototype');
+          const _mcP1Pr = getParam(h.params, 'p1', 'prototype');
+          const _mcP0Unit = getParam(h.params, 'p0', 'unitblueprint');
+          const _mcP1Unit = getParam(h.params, 'p1', 'unitblueprint');
+
+          const _mc0 = _resolveSkillName(_mcP0Bp);
+          const _mc1 = _resolveSkillName(_mcP1Bp);
+          const _mc2 = _resolveSkillName(_mcP0Pr);
+          const _mc3 = _resolveSkillName(_mcP1Pr);
+          const _mc4 = _resolveSkillName(_mcP0Unit);
+          const _mc5 = _resolveSkillName(_mcP1Unit);
+          _mcSkill = _mc0 || _mc1 || _mc2 || _mc3 || _mc4 || _mc5;
+          // p0.prototype was already 'Mana' — but try to resolve shadow walk from it as fallback
+          if (!_mcSkill && qualifier && qualifier !== 'Mana' && qualifier !== 'Mana Bonus') _mcSkill = qualifier;
+          displayName = _mcSkill ? 'Mana cost: ' + _mcSkill : 'Mana Cost';
+        } else {
+          displayName = qualifier;
+        }
+      }
+    }
+
+    // ── Slashing qualifier → Bleed in PURE_ELEMENTS check (done after displayName) ─
+    // (Slashing is now in ELEM_TO_STATUS → handled in Crit Chance block above)
+
+    // ── Re-run STAT_DISPLAY_NAME on the resolved displayName ─────────────────
+    // Catches cases where the qualifier becomes the new stat key
+    // e.g. qualifier='Stun On Get Hit' → STAT_DISPLAY_NAME lookup → 'chance to Stun attacker on getting hit'
+    displayName = STAT_DISPLAY_NAME[displayName] || displayName;
+
+    // ── Skill Level Bonus: use qualifier (skill name) as the display name ─────
+    if ((name === 'Skill Level Bonus' || name === 'Skills') && qualifier) {
+      displayName = qualifier;
+    }
+    // Skill Level Bonus Tag (e.g. +3 to all Witch skills, or global +1 All Skills)
+    if (name === 'Skill Level Bonus Tag') {
+      if (qualifier) {
+        // qualifier = "Witch Tag" → "Witch Skills"
+        const _tag = qualifier.replace(/\s*Tag\s*$/i, '').trim();
+        displayName = _tag + ' Skills';
+      } else {
+        // No qualifier → global bonus to all skills
+        displayName = 'All Skills';
+      }
+    }
+
+    // ── Boolean stat check — emit text-only line with no value prefix ─────────
+    const _boolDef = BOOLEAN_STAT_DISPLAY[displayName] || BOOLEAN_STAT_DISPLAY[name];
+    if (_boolDef && (A === '1' || value === 1)) {
+      lines.push({ text: _boolDef.text, color: _boolDef.color });
+      continue;
+    }
+
+    // ── Apply % / rate formatting ─────────────────────────────────────────────
+    if (RATE10_STATS.has(displayName) || RATE10_STATS.has(name)) {
+      // Stamina Regen: stored as fraction, game displays ×10 with /s (0.2 → 2.0/s)
+      const rawVal = (type === 'fixed') ? value : parseFloat(A);
+      A = (Math.round(rawVal * 100) / 10).toFixed(1) + '/s';
+    } else if (RATE_STATS.has(displayName) || RATE_STATS.has(name)) {
+      // Keep one decimal place for rate stats (e.g. 1.0 → "1.0/s")
+      const rawVal = (type === 'fixed') ? value : parseFloat(A);
+      A = (Math.round(rawVal * 10) / 10).toFixed(1) + '/s';
+    } else if (type === 'fixed' && MULT_STATS.has(name) && typeof value === 'number') {
       A = String(Math.round(value * 100)) + '%';
+    } else if ((PCT_SUFFIX_STATS.has(displayName) || PCT_SUFFIX_STATS.has(name)) && name !== 'Equipment Damage Bonus' && name !== 'Damage Bonus') {
+      if (!String(A).endsWith('%')) A = A + '%';
+    }
+
+    // Mana Cost reduction: value is positive fraction but represents a cost decrease → negate for display
+    if (String(displayName).toLowerCase().startsWith('mana cost')) {
+      const _mcVal = parseFloat(String(A).replace('%',''));
+      if (!isNaN(_mcVal)) A = '-' + Math.round(_mcVal) + '%';
     }
     // Mark stat requirement lines so tooltip can separate them from regular affixes
     const isRequirement = name.includes('Stat Requirement');
@@ -567,6 +1065,10 @@ function parseMaxFile(arrayBuffer) {
 
   return processCharacterData(actualData, digest);
 }
+
+// Class requirement stat GUID
+const CLASS_REQ_GUID = '93811abf826c9134a822a4ffac431263'; // Class Requirement Stat
+const EQUIP_CLASS_GUID = '1539971ec81211142809acc81d4de918';  // Equipment Class (alternate class-lock stat)
 
 // Skill-related stat and assignment GUIDs
 const SKILL_TREE_ASSIGN     = '58891c093990de64cad66fd4d3e74168'; // branch assignment
@@ -863,6 +1365,9 @@ function processCharacterData(data, digest) {
     const baName   = DH_GUIDS[bp];
     const baseName = baName ? normalizeName(baName) : `Unknown (${bp.slice(0,8)})`;
 
+    // Look up base attack speed from items.js BASE_ITEMS catalogue
+    const _baseItemDef = (typeof BASE_ITEMS !== 'undefined')
+      ? BASE_ITEMS.find(b => b.name === baseName) : null;
     const item = {
       name: baseName, slot: slotKey, slotDisplay: SLOT_DISPLAY[slotKey] || slotKey,
       typeDisplay: getItemTypeDisplay(baName, slotKey),
@@ -873,6 +1378,7 @@ function processCharacterData(data, digest) {
       socketCount: 0, sockets: [], socketSlots: [], socketed: [],
       dyeColor: null, dyeColors: null,
       affixLines: [],
+      baseSpeed: (_baseItemDef && typeof _baseItemDef.baseSpeed === 'number') ? _baseItemDef.baseSpeed : null,
     };
 
     for (const stat of unit.stats?.data ?? []) {
@@ -881,7 +1387,7 @@ function processCharacterData(data, digest) {
         case STAT_GUIDS.LEVEL:           item.level = v; break;
         case STAT_GUIDS.ITEM_PROG_REQ:   item.tomeTier = v; break;
         case STAT_GUIDS.SKILL_TOME_REQ:  item.tomeTier = item.tomeTier || v; break; // skill tomes use this instead
-        case STAT_GUIDS.STAT_REQ_BASE:   item.tomeReqValue = v; item.tomeReqAttrProto = stat.params?.p0?.prototype || null; break;
+        case STAT_GUIDS.STAT_REQ_BASE:   item.tomeReqValue = v; item.tomeReqAttrProto = getReqAttrProto(stat); break;
         case STAT_GUIDS.ITEM_MARK:       item.favourite = (v === 2); break;
         case STAT_GUIDS.QUALITY:         item.rarity = resolveRarity(stat.prototype); break;
         case STAT_GUIDS.ARMOR_BASE:        item.armor = (item.armor || 0) + v; break;
@@ -889,6 +1395,10 @@ function processCharacterData(data, digest) {
         case STAT_GUIDS.DMG_BASE_MIN:    item.damageMin = v; break;
         case STAT_GUIDS.DMG_BASE_MAX:    item.damageMax = v; break;
         case STAT_GUIDS.DMG_TYPE:        if (stat.prototype) item.damageType = resolveGuid(stat.prototype); break;
+        // Weapon damage % and attack speed are on the item unit itself (not affix sub-units)
+        case STAT_GUIDS.EQUIP_DMG_PCT:   item.damagePercent = (item.damagePercent || 0) + v; break;
+        case STAT_GUIDS.EQUIP_DMG_FLAT:  item.damageFlat    = (item.damageFlat    || 0) + (typeof v === 'number' ? Math.round(v) : 0); break;
+        // EQUIP_ATK_SPD on item unit = intrinsic base speed, not a bonus; handled via baseSpeed table
         case STAT_GUIDS.RARE_NAME:
           // String stat: the item's proper rare/magic name ("Wild Cincture", "Arcane Sabots", etc.)
           if (stat.string) item.rareName = stat.string;
@@ -913,6 +1423,11 @@ function processCharacterData(data, digest) {
           }
           break;
         }
+      }
+      // "+N to [Witch Skill]" stats stored directly on the item unit
+      if (stat.stat === 'cf4be72497e1b08459dbab29c64edab6' ||
+          stat.stat === '4267c6613bda4d94a99ef98fe962fce6') {
+        _pushWitchSkillStat(stat, item.affixLines);
       }
     }
 
@@ -1036,7 +1551,13 @@ function processCharacterData(data, digest) {
           break;
         }
         case STAT_GUIDS.ATTACK_SPEED_MULT:
-          if (!parent?.slot?.includes('_alt')) charData.stats.attackSpeed += v; break;
+          if (!parent?.slot?.includes('_alt')) charData.stats.attackSpeed += v;
+          // Only accumulate atkSpdBonus from real bonus affix units, not legendary affix units
+          // (legendary affix units store intrinsic weapon speed, not a player bonus)
+          if (parent && !LEGENDARY_AFFIX_NAMES[bp]) {
+            parent.atkSpdBonus = (parent.atkSpdBonus || 0) + Math.round(v * 100);
+          }
+          break;
         case STAT_GUIDS.CAST_SPEED_MULT:
           if (!parent?.slot?.includes('_alt')) charData.stats.castSpeed   += v; break;
         case STAT_GUIDS.PENETRATION: {
@@ -1104,12 +1625,22 @@ function processCharacterData(data, digest) {
           if (!parent?.slot?.includes('_alt')) { charData.stats.vitalityFromItems  = (charData.stats.vitalityFromItems  || 0) + v; } break;
         case STAT_GUIDS.MAGIC_BONUS:
           if (!parent?.slot?.includes('_alt')) { charData.stats.magicFromItems     = (charData.stats.magicFromItems     || 0) + v; } break;
+        // Weapon damage % and flat bonus — propagate from stat affix sub-units only (not legendary affix units)
+        case STAT_GUIDS.EQUIP_DMG_PCT:
+          if (parent && !LEGENDARY_AFFIX_NAMES[bp]) parent.damagePercent = (parent.damagePercent || 0) + v; break;
+        case STAT_GUIDS.EQUIP_DMG_FLAT:
+          if (parent && !LEGENDARY_AFFIX_NAMES[bp]) parent.damageFlat = (parent.damageFlat || 0) + (typeof v === 'number' ? Math.round(v) : 0); break;
       }
     }
 
-    // Propagate SOCKETS stat from AFFIX unit to parent equip item
+    // Propagate SOCKETS and DMG_TYPE (Elemental Imbue) from AFFIX unit to parent equip item
     if (isAffix) {
       for (const _est of unit.stats?.data ?? []) {
+        // Elemental Imbue affix stores DMG_TYPE — propagate to parent so tooltip shows "Lightning Imbued"
+        if (_est.stat === STAT_GUIDS.DMG_TYPE && _est.prototype && parent) {
+          const _imbueType = resolveGuid(_est.prototype);
+          if (_imbueType) parent.damageType = _imbueType;
+        }
         if (_est.stat !== STAT_GUIDS.SOCKETS) continue;
         const { value: _esv } = readStat(_est);
         const _esn = (typeof _esv === 'number' && _esv > 0) ? _esv : 1;
@@ -1206,6 +1737,8 @@ function processCharacterData(data, digest) {
     const baName = DH_GUIDS[bp];
     const baseName = baName ? normalizeName(baName) : `Unknown (${bp.slice(0,8)})`;
 
+    const _stashItemDef = (typeof BASE_ITEMS !== 'undefined')
+      ? BASE_ITEMS.find(b => b.name === baseName) : null;
     const item = {
       name: baseName, slot: null, slotDisplay: null,
       typeDisplay: null, // will be set after slot is known
@@ -1219,6 +1752,7 @@ function processCharacterData(data, digest) {
       affixLines: [], stashIndex: loc.index,
       bagNum: loc.index >> 16,       // = stash row (0–15)
       bagCol: loc.index & 0xFFFF,      // = stash col (0–14) directly
+      baseSpeed: (_stashItemDef && typeof _stashItemDef.baseSpeed === 'number') ? _stashItemDef.baseSpeed : null,
     };
 
     for (const stat of unit.stats?.data ?? []) {
@@ -1227,7 +1761,7 @@ function processCharacterData(data, digest) {
         case STAT_GUIDS.LEVEL:         item.level    = v; break;
         case STAT_GUIDS.ITEM_PROG_REQ: item.tomeTier = v; break;
         case STAT_GUIDS.SKILL_TOME_REQ: item.tomeTier = item.tomeTier || v; break;
-        case STAT_GUIDS.STAT_REQ_BASE: item.tomeReqValue = v; item.tomeReqAttrProto = stat.params?.p0?.prototype || null; break;
+        case STAT_GUIDS.STAT_REQ_BASE: item.tomeReqValue = v; item.tomeReqAttrProto = getReqAttrProto(stat); break;
         case STAT_GUIDS.ITEM_MARK:     item.favourite = (v === 2); break;
         case STAT_GUIDS.QUANTITY:      item.quantity = typeof v === 'number' ? v : null; break;
         case STAT_GUIDS.QUALITY:       item.rarity = resolveRarity(stat.prototype); break;
@@ -1235,6 +1769,9 @@ function processCharacterData(data, digest) {
         case STAT_GUIDS.DMG_BASE_MIN:  item.damageMin = v; break;
         case STAT_GUIDS.DMG_BASE_MAX:  item.damageMax = v; break;
         case STAT_GUIDS.DMG_TYPE:      if (stat.prototype) item.damageType = resolveGuid(stat.prototype); break;
+        case STAT_GUIDS.EQUIP_DMG_PCT: item.damagePercent = (item.damagePercent || 0) + v; break;
+        case STAT_GUIDS.EQUIP_DMG_FLAT: item.damageFlat   = (item.damageFlat   || 0) + (typeof v === 'number' ? Math.round(v) : 0); break;
+        // EQUIP_ATK_SPD on item unit = intrinsic base speed, not a bonus; handled via baseSpeed table
         case STAT_GUIDS.PROPERNAME: {
           // Use the stored proper name if blueprint lookup failed
           const pn = resolveGuid(typeof v === 'string' ? v : stat.prototype);
@@ -1273,6 +1810,11 @@ function processCharacterData(data, digest) {
           }
           break;
         }
+      }
+      // "+N to [Witch Skill]" stats stored directly on the item unit
+      if (stat.stat === 'cf4be72497e1b08459dbab29c64edab6' ||
+          stat.stat === '4267c6613bda4d94a99ef98fe962fce6') {
+        _pushWitchSkillStat(stat, item.affixLines);
       }
     }
 
@@ -1485,9 +2027,28 @@ function processCharacterData(data, digest) {
       parent.name              = legName;
       if (!parent.rarity) parent.rarity = 'Legendary';
     }
-    // Propagate SOCKETS stat from affix unit to parent stash item
+    // Propagate SOCKETS, DMG_TYPE, atkSpdBonus, damagePercent, damageFlat from affix unit to parent stash item
     if (isStashAffix) {
       for (const _sst of unit.stats?.data ?? []) {
+        if (_sst.stat === STAT_GUIDS.DMG_TYPE && _sst.prototype && parent) {
+          const _sImbue = resolveGuid(_sst.prototype);
+          if (_sImbue) parent.damageType = _sImbue;
+        }
+        // Attack speed bonus on weapon affixes → propagate (skip legendary affix units = intrinsic speed)
+        if (_sst.stat === STAT_GUIDS.ATTACK_SPEED_MULT && parent && !LEGENDARY_AFFIX_NAMES[bp]) {
+          const { value: _sv } = readStat(_sst);
+          if (typeof _sv === 'number') parent.atkSpdBonus = (parent.atkSpdBonus || 0) + Math.round(_sv * 100);
+        }
+        // Weapon damage % on affixes → propagate (skip legendary affix units)
+        if (_sst.stat === STAT_GUIDS.EQUIP_DMG_PCT && parent && !LEGENDARY_AFFIX_NAMES[bp]) {
+          const { value: _sv } = readStat(_sst);
+          if (typeof _sv === 'number') parent.damagePercent = (parent.damagePercent || 0) + _sv;
+        }
+        // Flat weapon damage on affixes → propagate (skip legendary affix units)
+        if (_sst.stat === STAT_GUIDS.EQUIP_DMG_FLAT && parent && !LEGENDARY_AFFIX_NAMES[bp]) {
+          const { value: _sv } = readStat(_sst);
+          if (typeof _sv === 'number') parent.damageFlat = (parent.damageFlat || 0) + Math.round(_sv);
+        }
         if (_sst.stat !== STAT_GUIDS.SOCKETS) continue;
         const { value: _ssv } = readStat(_sst);
         const _ssn = (typeof _ssv === 'number' && _ssv > 0) ? _ssv : 1;
@@ -1499,8 +2060,181 @@ function processCharacterData(data, digest) {
       }
     }
     const lines = buildAffixLines(unit);
-    for (const ln of lines) parent.affixLines.push(ln);
+    if (isStashBonus) {
+      // Mark lines from socketed stash items — mirrors the equipment pass so bullet colours
+      // and socketed-affix merging (buildAffixRows) work correctly for stash items too.
+      const _sbpN  = DH_GUIDS[unit.blueprint||''] || '';
+      const _sockT = /core/i.test(_sbpN) ? 'heart' : /rune/i.test(_sbpN) ? 'rune' : 'gem';
+      const _lastSock = parent.socketed && parent.socketed[parent.socketed.length - 1];
+      for (const ln of lines) {
+        ln.socketed = true;
+        ln.sockType = _sockT;
+        if (_lastSock) {
+          ln.heartRarity = _lastSock.heartRarity;
+          ln.gemName     = _lastSock.name;
+        }
+        parent.affixLines.push(ln);
+      }
+    } else {
+      for (const ln of lines) parent.affixLines.push(ln);
+    }
   }
+
+  // --- Inventory/Backpack Pass — collect items from INVENTORY container ---
+  // Grid layout: 15 columns × 6 rows. index = (row * 65536) + col.
+  // Parsed identically to the stash pass; affixes and sockets resolved the same way.
+  charData.inventory = [];
+  const inventoryByIdx = {};
+  for (let i = 0; i < units.length; i++) {
+    const unit = units[i];
+    const loc  = unit.location;
+    if (!loc || loc.owner !== charUnitIdx || loc.container !== CONTAINERS.INVENTORY) continue;
+
+    const bp      = unit.blueprint || '';
+    const baName  = DH_GUIDS[bp];
+    const baseName = baName ? normalizeName(baName) : `Unknown (${bp.slice(0,8)})`;
+
+    const item = {
+      name: baseName, slot: null, slotDisplay: null,
+      typeDisplay: null,
+      blueprint: bp, dbid: unit.dbid || '0x0',
+      legendaryName: null, legendaryAffixGuid: null, rareName: null,
+      level: null, rarity: null, armor: null,
+      damageMin: null, damageMax: null, damageType: null,
+      socketCount: 0, sockets: [], socketSlots: [], socketed: [],
+      dyeColor: null, dyeColors: null, quantity: null, gemType: null, gemLevel: null, dyeName: null,
+      heartSourceBp: null, heartName: null, heartIsUniqueSocket: false,
+      affixLines: [], stashIndex: loc.index,
+      bagNum: loc.index >> 16,     // row (0–5)
+      bagCol: loc.index & 0xFFFF,  // col (0–14)
+    };
+
+    // Same stat parsing as stash pass
+    for (const stat of unit.stats?.data ?? []) {
+      const { value: v } = readStat(stat);
+      switch (stat.stat) {
+        case STAT_GUIDS.LEVEL:      item.level  = typeof v === 'number' ? v : null; break;
+        case STAT_GUIDS.QUALITY:    item.rarity = resolveRarity(v) || null; break;
+        case STAT_GUIDS.ARMOR_BASE: item.armor  = typeof v === 'number' ? v : null; break;
+        case STAT_GUIDS.DMG_BASE_MIN: item.damageMin = typeof v === 'number' ? v : null; break;
+        case STAT_GUIDS.DMG_BASE_MAX: item.damageMax = typeof v === 'number' ? v : null; break;
+        case STAT_GUIDS.QUANTITY:   item.quantity = typeof v === 'number' ? v : null; break;
+        case STAT_GUIDS.RARE_NAME:  item.rareName = null; break; // encoded as long
+        case STAT_GUIDS.ITEM_MARK:  item.dbid = unit.dbid || '0x0'; break;
+      }
+    }
+
+    // Rune detection
+    const _invRuneName = baName ? normalizeName(baName) : '';
+    const _invRuneM = _invRuneName.match(/^Rune\s+0*(\d+)/i);
+    if (_invRuneM) {
+      item.slot = 'rune';
+      const _rNum = parseInt(_invRuneM[1]);
+      const _RUNE_NAMES_INV = { 1:'Ash', 2:'Bat', 3:'Ka', 4:'Deb', 5:'Elm' };
+      item.name = (_RUNE_NAMES_INV[_rNum] || 'Rune') + ' Rune';
+      item.runeNum = _rNum;
+    }
+
+    // Gem detection — same pattern as stash
+    const _invGemBp = baName || '';
+    if (/\bGem\b/i.test(_invGemBp) || item.slot === 'gem') {
+      item.slot = 'gem';
+      const _gm = _invGemBp.match(/Gem\s+([A-Za-z]+)/i);
+      if (_gm) item.gemType = _gm[1].toLowerCase();
+    }
+
+    if (!item.rarity) {
+      if (item.slot === 'rune') item.rarity = 'Common';
+      else if (item.slot === 'gem') item.rarity = 'Common';
+    }
+
+    item.typeDisplay = getItemTypeDisplay(baName || '', item.slot || '');
+
+    charData.inventory.push(item);
+    inventoryByIdx[i] = item;
+  }
+
+  // Inventory affix + socket pass
+  const inventoryAffixOwner = {};
+  for (let i = 0; i < units.length; i++) {
+    const u3 = units[i];
+    if (!u3.location) continue;
+    if (u3.location.container !== CONTAINERS.AFFIXES) continue;
+    const p3 = inventoryByIdx[u3.location.owner];
+    if (p3) inventoryAffixOwner[i] = p3;
+  }
+
+  for (let i = 0; i < units.length; i++) {
+    const unit = units[i];
+    const loc  = unit.location;
+    if (!loc) continue;
+    const isInvAffix = loc.container === CONTAINERS.AFFIXES;
+    const isInvBonus = loc.container === CONTAINERS.BONUS_STATS;
+    if (!isInvAffix && !isInvBonus) continue;
+    const parent = inventoryByIdx[loc.owner] || inventoryAffixOwner[loc.owner] || null;
+    if (!parent) continue;
+
+    if (isInvBonus) {
+      const _ibpName = DH_GUIDS[unit.blueprint||''] || '';
+      const _iIsHeart = /core/i.test(_ibpName), _iIsRune = /rune/i.test(_ibpName);
+      const _iType = _iIsHeart ? 'heart' : _iIsRune ? 'rune' : 'gem';
+      const _iName = resolveSocketItemName(_ibpName) || normalizeName(_ibpName) || null;
+      if (!parent.socketed) parent.socketed = [];
+      parent.socketed.push({ type: _iType, name: _iName || _iType });
+    }
+
+    if (isInvAffix) {
+      const _bp = unit.blueprint || '';
+      const _legName = LEGENDARY_AFFIX_NAMES[_bp];
+      if (_legName && !parent.legendaryName) {
+        parent.legendaryName      = _legName;
+        parent.legendaryAffixGuid = _bp;
+        parent.name               = _legName;
+        if (!parent.rarity) parent.rarity = 'Legendary';
+      }
+      for (const _sst of unit.stats?.data ?? []) {
+        if (_sst.stat === STAT_GUIDS.DMG_TYPE && _sst.prototype && parent)
+          parent.damageType = resolveGuid(_sst.prototype) || parent.damageType;
+        if (_sst.stat === STAT_GUIDS.SOCKETS) {
+          const { value: _ssv } = readStat(_sst);
+          const _ssn = (typeof _ssv === 'number' && _ssv > 0) ? _ssv : 1;
+          parent.socketCount = (parent.socketCount || 0) + _ssn;
+        }
+      }
+    }
+
+    const lines = buildAffixLines(unit);
+    if (isInvBonus) {
+      const _ibpN  = DH_GUIDS[unit.blueprint||''] || '';
+      const _sockT = /core/i.test(_ibpN) ? 'heart' : /rune/i.test(_ibpN) ? 'rune' : 'gem';
+      const _lastSock = parent.socketed && parent.socketed[parent.socketed.length - 1];
+      for (const ln of lines) {
+        ln.socketed = true;
+        ln.sockType = _sockT;
+        if (_lastSock) { ln.heartRarity = _lastSock.heartRarity; ln.gemName = _lastSock.name; }
+        parent.affixLines.push(ln);
+      }
+    } else {
+      for (const ln of lines) parent.affixLines.push(ln);
+    }
+  }
+
+  // Some boots with Magic Find don't serialize explicit STAT_REQ_BASE in save data.
+  // Mirror in-game behavior by inferring the missing Magic requirement line.
+  function applyImplicitBootMagicReq(items) {
+    for (const item of (items || [])) {
+      if (!item || item.slot !== 'feet') continue;
+      const lines = item.affixLines || [];
+      const hasMagicFind = lines.some(l => String(l.name || '').toLowerCase() === 'magic find');
+      if (!hasMagicFind) continue;
+      const hasMagicReq = lines.some(l => l && l.isRequirement && l.name === 'Magic');
+      if (hasMagicReq) continue;
+      lines.push({ name: 'Magic', value: '38', isRequirement: true });
+    }
+  }
+  applyImplicitBootMagicReq(charData.equipment);
+  applyImplicitBootMagicReq(charData.stash);
+  applyImplicitBootMagicReq(charData.inventory);
 
   return charData;
 }

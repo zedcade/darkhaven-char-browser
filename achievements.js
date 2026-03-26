@@ -254,20 +254,20 @@ const BEAST_CATALOGUE = [
   { species:'Blubberjaw',              entries:[{ bp:'e85d736511eba9f489cb848803b5f835', rarity:'Unique' }]},
 
   // ── Named Champions (fixed world encounters) ───────────────────────────────
-  { species:'Baragon',                 entries:[
+  { species:'Arb the Enslaver',          entries:[
     { bp:'e4125f2c852acfa4d81dfe8b98bfc11e', rarity:'Named'    },
     { bp:'e4125f2c852acfa4d81dfe8b98bfc11e', rarity:'Champion' }]},
-  { species:'Burial Knight',           entries:[
+  { species:'Esclados the Turncoat',   entries:[
     { bp:'f9f5953c9a271004ebfbd33ca7552e02', rarity:'Named'    },
     { bp:'f9f5953c9a271004ebfbd33ca7552e02', rarity:'Champion' }]},
   { species:'Clonus Horror',           entries:[{ bp:'207eb2c6c2e0b5246b16b558bc4fb248', rarity:'Champion' }]},
-  { species:'Gulpjaw (Named)',         entries:[
+  { species:'Sizzle Bough',            entries:[
     { bp:'825fb6728dff88343a6d71c021d70063', rarity:'Named'    },
     { bp:'825fb6728dff88343a6d71c021d70063', rarity:'Champion' }]},
   { species:'Salazar',                 entries:[
     { bp:'09b846aff69ac714d882721387843921', rarity:'Named'    },
     { bp:'09b846aff69ac714d882721387843921', rarity:'Champion' }]},
-  { species:'Tunnel Thug',             entries:[
+  { species:'Babanikku',               entries:[
     { bp:'842eae4f5f88e3c4fb172775607e7273', rarity:'Named'    },
     { bp:'842eae4f5f88e3c4fb172775607e7273', rarity:'Champion' }]},
 

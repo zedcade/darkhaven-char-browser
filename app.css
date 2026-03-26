@@ -267,10 +267,18 @@
   .tip-sock-badge--gold { border:2px solid #d4a847; box-shadow:0 0 5px #c9a84c99; color:#c9a84c; }
   .tip-subtitle { font-size:.72rem; margin-bottom:4px; }
   .tip-divider  { border-top:1px solid rgba(255,255,255,.08); margin:6px 0 4px; }
-  .tip-dmg-row  { display:flex; align-items:center; gap:5px; font-size:.8rem; margin-top:auto; margin-bottom:2px; }
-  .tip-dmg-icon { color:rgba(255,255,255,.3); }
-  .tip-dmg-val  { font-weight:700; }
-  .tip-dmg-elem { font-size:.7rem; margin-left:2px; }
+  .tip-dmg-row      { display:flex; align-items:baseline; gap:4px; margin-top:auto; margin-bottom:1px; }
+  .tip-dmg-icon     { font-size:.82rem; flex-shrink:0; line-height:1; }
+  /* DPS header — larger, bold, dark orange */
+  .tip-dps-row      { margin-bottom:3px; }
+  .tip-dps-val      { font-size:.9rem; font-weight:700; line-height:1.2; }
+  /* legacy selectors kept for fallback */
+  .tip-dmg-val      { font-weight:700; }
+  .tip-dmg-elem     { font-size:.7rem; margin-left:2px; }
+  /* Indented sub-rows — same size as affix lines (.75rem) */
+  .tip-dmg-subrow   { margin-top:0; margin-bottom:1px; }
+  .tip-dmg-indent   { font-size:.75rem; padding-left:14px; flex-shrink:0; line-height:1; }
+  .tip-dmg-subval   { font-size:.75rem; font-weight:500; }
   .tip-armor-row { display:flex; align-items:center; gap:5px; font-size:.8rem; margin-top:auto; margin-bottom:2px; color:#8ab4f8; }
   .tip-armor-val { font-weight:600; }
   .tip-dye-row  { display:flex; align-items:center; gap:6px; font-size:.72rem; margin-top:4px; }
@@ -278,10 +286,10 @@
   .tip-dye-chips { display:flex; gap:3px; flex-wrap:wrap; }
   .tip-dye-chip  { display:inline-block; width:12px; height:12px; border-radius:2px; border:1px solid rgba(255,255,255,.15); }
   .tip-affix-header { font-size:.65rem; margin-top:3px; font-style:italic; }
-  .tip-affix-row        { display:flex; align-items:center; gap:4px; font-size:.76rem; line-height:1.4; }
+  .tip-affix-row        { display:flex; align-items:flex-start; gap:4px; font-size:.76rem; line-height:1.4; }
   /* Bullet spans are empty — character and colour come entirely from CSS.
      To change any bullet: edit content / color here only, no JS changes needed. */
-  .tip-bullet           { flex-shrink:0; width:1em; text-align:center; font-size:.62rem; line-height:1; }
+  .tip-bullet           { flex-shrink:0; width:1em; text-align:center; font-size:.62rem; line-height:1; margin-top:0.35em; }
   .tip-bullet::before   { display:block; }
   .tip-bullet--regular::before { content:'◆'; color:#ffffff; }
   .tip-bullet--gem::before     { content:'♦'; /* color set inline from gemColor() */ }
@@ -855,7 +863,7 @@
   .dh-footer-link:hover, .dh-footer-link-gh:hover { color:#a78bfa; }
   .dh-sidebar-logo    { width:100%; max-width:220px; display:block; margin:auto; }
   .dh-filelist-empty  { padding:1.5rem; color:var(--text-muted); font-size:0.9rem; }
-
+  
   /* ── Achievement category: fully-mastered legendary glow ──────────────── */
   @keyframes dh-cat-mastered-pulse {
     0%, 100% {

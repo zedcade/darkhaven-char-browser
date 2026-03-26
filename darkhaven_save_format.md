@@ -133,9 +133,10 @@ There is no separate player backpack. Items are either equipped or in the stash.
 | Staff / Bow / Polearm / Halberd / Spear | 1 | 4 | `staff`, `bow`, `polearm`, `halberd`, `spear` |
 | Helm / Gloves / Boots / Shield / Buckler / Targe / Tome / Book | 2 | 2 | `helm`, `cap`, `crown`, `hood`, `veil`, `gloves`, `boots`, `shield`, `buckler`, `targe`, `tome`, `book` |
 | Heater / Carapace shields | 2 | 3 | `\bheater\b` or `\bcarapace\b` in name or typeDisplay |
-| Sword / Dagger / Mace / Axe / Wand / Scepter / Knife | 1 | 3 | `dagger`, `sword`, `mace`, `axe`, `wand`, `scepter`, `knife` |
+| Sword / Mace / Axe | 1 | 3 | `sword`, `mace`, `axe`
+| Dagger / Wand / Scepter / Knife | 1 | 2 | `dagger`, `wand`, `scepter`, `knife` 
 | Belt / Sash / Cord / Cincture / Girdle | 2 | 1 | `belt`, `sash`, `cord`, `cincture`, `girdle` |
-| Flask / Potion | 1 | 2 | `flask`, `potion` |
+| Flask / Potion | 1 | 1 | `flask`, `potion` |
 | Ring / Amulet / Gem / Core / Rune / Dye / Key / Scroll | 1 | 1 | *(default)* |
 
 ---
@@ -639,7 +640,7 @@ Image path: `img/dyes/{name_lowercase_underscores}_dye.png`
 | Tigress | `d45e0b9357213b4ee89318df52b30bc4` |
 | Ursa Major | `a78b3e9357213b4ee89318df52b30bc4` |
 
-Achiote, Cardinal, Myrmidon have no known catalog GUID.
+Verify: Achiote, Cardinal, Myrmidon catalog GUID.
 
 ---
 
@@ -804,5 +805,5 @@ No changes — both versions use `blueprint`, `dbid`, `location`, `otherstats`, 
 - `MANA_MAX_BONUS` is absent from some saves — fallback formula produces correct results in both cases
 - `Experience` is absent from offline saves — display "Level Cap"
 - Blueprint GUID dictionary: `DH_GUIDS` in `maxguids.js`
-- All GUID keys in `DH_GUIDS` are quoted strings (3,016 unquoted keys were normalised)
+- All GUID keys in `DH_GUIDS` are quoted strings
 - Skill/talent tome items all share one blueprint (`da490a9d…`) and are indistinguishable in the save

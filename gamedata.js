@@ -131,7 +131,7 @@ const ITEM_FIND_TYPES = {
 // ── Container type GUIDs ───────────────────────────────────────────────────
 const CONTAINERS = {
   EQUIPMENT:     '0b50d10714d6c0c4bb7f5447dfb5a745',
-  ALT_EQUIPMENT: '1d936ddad6b2af4418e3d46a2bc946ee',
+  INVENTORY:     '1d936ddad6b2af4418e3d46a2bc946ee', // player backpack grid (15 cols × 6 rows), index = row*65536 + col
   AFFIXES:       '864d7327e29b7464694ce0baf5bed2fd',
   BONUS_STATS:   '688a379c1b446ea40a944279e04382e8',
   STASH:         '3cc00cfe933e46344879c0f506594096',
@@ -177,6 +177,7 @@ const TATTOO_SLOT_INDEX = {
 // ── Kill-log display name overrides ────────────────────────────────────────
 // Keyed by DH_GUIDS name string (all variant GUIDs share the same string value).
 const MOB_DISPLAY_NAMES = {
+  // ── Unique bosses ─────────────────────────────────────────────────────────
   'Barrow Knight 1H Slashing Unique Unit': 'Disgraced Paladin',
   'Bogie Feral Unique Unit':               'Rokkudokin',
   'Bogie Tyrant Unique Unit':              'Warren Chief',
@@ -188,6 +189,12 @@ const MOB_DISPLAY_NAMES = {
   'Unique Bramblehusk Unit':               'Old Granddad',
   'Unique Deep Ones Unit':                 'Riptide Horror',
   'Leviathan Unique Unit':                 'Leviathan',
+  // ── Named champions — normalizeName() produces wrong output for these ─────
+  'Champion Baragon Unit':                 'Arb the Enslaver',
+  'Champion Burial Knight Unit':           'Esclados the Turncoat',
+  'Champion Gulpjaw Unit':                 'Sizzle Bough',
+  'Tunnel Thug Unit':                      'Babanikku',
+  // Salazar and Clonus Horror: normalizeName strips "Champion " prefix correctly
 };
 
 // ── Heart source name → base display name ─────────────────────────────────

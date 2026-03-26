@@ -31,6 +31,7 @@
 // its image filename to LEG_IMAGES. No other file needs changing.
 //
 // Last updated: patch 0.0.23609 (2026-03-16)
+// baseSpeed: weapon base attack speed (attacks/sec). Used by app.js tooltip for Attacks/s and DPS calc.
 // ---------------------------------------------------------------------------
 
 // ── Base item catalogue ────────────────────────────────────────────────────
@@ -84,28 +85,29 @@ const BASE_ITEMS = [
   { name:'Targe',                category:'armours',  slot:'hand_left',  rarity:'variable',           reqLevel:null },
 
   // ── Weapons — Main Hand (Daggers & One-Handed) ────────────────────────────
-  { name:'Bodkin',               category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null },
-  { name:'Dagger',               category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null },
-  { name:'Duskshear',            category:'weapons',  slot:'hand_right', rarity:'special',            reqLevel:null },
-  { name:'Gibbering Stabber',    category:'weapons',  slot:'hand_right', rarity:'special',            reqLevel:null },
-  { name:'Knife',                category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null },
-  { name:'Poignard',             category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null },
-  { name:'Ripfury Claw',         category:'weapons',  slot:'hand_right', rarity:'special',            reqLevel:null },
-  { name:'Ritual Dagger',        category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null },
-  { name:'Sacrificial Knife',    category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null },
-  { name:'Sword',                category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null },
-  { name:'Tyrant',               category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null },
-  { name:'Crystal Shard',        category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null },
+  { name:'Bodkin',               category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null, baseSpeed:1.666666667 },
+  { name:'Dagger',               category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null, baseSpeed:1.666666667 },
+  { name:'Duskshear',            category:'weapons',  slot:'hand_right', rarity:'special',            reqLevel:null, baseSpeed:1.666666667 },
+  { name:'Gibbering Stabber',    category:'weapons',  slot:'hand_right', rarity:'special',            reqLevel:null, baseSpeed:1.515 },
+  { name:'Knife',                category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null, baseSpeed:1.666666667 },
+  { name:'Poignard',             category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null, baseSpeed:1.666666667 },
+  { name:'Ripfury Claw',         category:'weapons',  slot:'hand_right', rarity:'special',            reqLevel:null, baseSpeed:1.922 },
+  { name:'Ritual Dagger',        category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null, baseSpeed:1.4492 },
+  { name:'Sacrificial Knife',    category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null, baseSpeed:1.45 },
+  { name:'Sword',                category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null, baseSpeed:1.1  },
+  { name:'Tyrant',               category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null, baseSpeed:0.9  },
+  { name:'Crystal Shard',        category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null, baseSpeed:1.1  },
 
   // ── Weapons — Two-Handed (Staves) ─────────────────────────────────────────
-  { name:'Bramble Staff',        category:'weapons',  slot:'twohand',    rarity:'special',            reqLevel:null },
-  { name:'Crystal Shard Staff', category:'weapons',  slot:'twohand',    rarity:'variable',           reqLevel:null },
-  { name:'Gnarled Staff',        category:'weapons',  slot:'twohand',    rarity:'variable',           reqLevel:null },
-  { name:'Snagtooth Pike',       category:'weapons',  slot:'twohand',    rarity:'special',            reqLevel:null },
-  { name:'Spired Staff',         category:'weapons',  slot:'twohand',    rarity:'variable',           reqLevel:null },
-  { name:'Thorn Staff',          category:'weapons',  slot:'twohand',    rarity:'special',            reqLevel:null },
-  { name:'Twin Pronged Staff',   category:'weapons',  slot:'twohand',    rarity:'variable',           reqLevel:null },
-  { name:"Tyrant's Staff",       category:'weapons',  slot:'twohand',    rarity:'special',            reqLevel:null },
+  { name:'Bramble Staff',        category:'weapons',  slot:'twohand',    rarity:'special',            reqLevel:null, baseSpeed:1.03 },
+  { name:'The Golden Bough',     category:'weapons',  slot:'twohand',    rarity:'legendary',            reqLevel:null, baseSpeed:1.159 },
+  { name:'Crystal Shard Staff', category:'weapons',  slot:'twohand',    rarity:'variable',           reqLevel:null, baseSpeed:1.11111111111111 },
+  { name:'Gnarled Staff',        category:'weapons',  slot:'twohand',    rarity:'variable',           reqLevel:null, baseSpeed:1.11111111111111 },
+  { name:'Snagtooth Pike',       category:'weapons',  slot:'twohand',    rarity:'special',            reqLevel:null, baseSpeed:1.25 },
+  { name:'Spired Staff',         category:'weapons',  slot:'twohand',    rarity:'variable',           reqLevel:null, baseSpeed:1.1109 },
+  { name:'Thorn Staff',          category:'weapons',  slot:'twohand',    rarity:'special',            reqLevel:null, baseSpeed:1.00 },
+  { name:'Twin Pronged Staff',   category:'weapons',  slot:'twohand',    rarity:'variable',           reqLevel:null, baseSpeed:1.11111111111111 },
+  { name:"Tyrant's Staff",       category:'weapons',  slot:'twohand',    rarity:'special',            reqLevel:null, baseSpeed:1.00 },
 
   // ── Gems ──────────────────────────────────────────────────────────────────
   { name:'Cracked Amber',        category:'gems',     slot:'—',          rarity:'Common',             reqLevel:null },
