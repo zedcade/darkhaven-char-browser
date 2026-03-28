@@ -1081,6 +1081,149 @@ const SKILL_BONUS_TAG_GUID  = '25b481d33060adb478dcc38fc70cb997'; // +N all/spec
 // ---------------------------------------------------------------------------
 // Internal: build character data object from parsed save
 // ---------------------------------------------------------------------------
+
+// ── Shared item-parsing helpers (stash + inventory) ─────────────────────────
+const _ITM_RUNE_NUM_TO_NAME = { '1':'Ash Rune', '2':'Bat Rune', '3':'Ka Rune', '4':'Deb Rune', '5':'Elm Rune' };
+const _ITM_RUNE_NUM_TO_ELEM = { '1':'Health', '2':'Blood', '3':'AoE', '4':'Defend', '5':'Life' };
+const _ITM_GEM_LEVEL_PREFIX = { 1:'Cracked', 2:'Flawed', 3:'Dull' };
+const _ITM_DYE_BP = {
+  'd55d2c9357213b4ee89318df52b30bc4':'Cadet','f33b0a9357213b4ee89318df52b30bc4':'Cinnibar',
+  'c34d9a9357213b4ee89318df52b30bc4':'Eventide','e22a9f9357213b4ee89318df52b30bc4':'Hornet',
+  'b23c8f9357213b4ee89318df52b30bc4':'Kingfisher','f67a2d9357213b4ee89318df52b30bc4':'Lion',
+  'b13c8f8d227448e89318df52b30bc412':'Monarch','e89c4f9357213b4ee89318df52b30bc4':'Nimbus',
+  'f90d5f9357213b4ee89318df52b30bc4':'Queen of Night','e56f1c9357213b4ee89318df52b30bc4':'Royal',
+  'a44c1b9357213b4ee89318df52b30bc4':'Serengeti','d94acd9357213b4ee89318df52b30bc4':'Syringa',
+  'd45e0b9357213b4ee89318df52b30bc4':'Tigress','a78b3e9357213b4ee89318df52b30bc4':'Ursa Major',
+};
+const _ITM_DYE_NAMES = {
+  'Orange Brown Copper':'Achiote','Green Blue Steel':'Cadet','Red Black Steel':'Cardinal',
+  'Red White Copper':'Cinnibar','Black White Bronze':'Eventide','Yellow Black Copper':'Hornet',
+  'Blue Orange Bronze':'Kingfisher','Brown Yellow Copper':'Lion','DarkBrown Orange Brass':'Monarch',
+  'DarkBlue Yellow Brass':'Myrmidon','White Blue Steel':'Nimbus','Black Red Silver':'Queen of Night',
+  'Purple Orange Bronze':'Royal','Tan Brown Brass':'Serengeti','LightPurple Green Bronze':'Syringa',
+  'Orange Black Steel':'Tigress','LightBlue Yellow Steel':'Ursa Major',
+};
+
+/** Parse all common stats from an item unit. Shared by stash + inventory passes. */
+function _parseItemStatCore(unit, item) {
+  for (const stat of unit.stats?.data ?? []) {
+    const { value: v } = readStat(stat);
+    switch (stat.stat) {
+      case STAT_GUIDS.LEVEL:          item.level    = v; break;
+      case STAT_GUIDS.ITEM_PROG_REQ:  item.tomeTier = v; break;
+      case STAT_GUIDS.SKILL_TOME_REQ: item.tomeTier = item.tomeTier || v; break;
+      case STAT_GUIDS.STAT_REQ_BASE:  item.tomeReqValue = v; item.tomeReqAttrProto = getReqAttrProto(stat); break;
+      case STAT_GUIDS.ITEM_MARK:      item.favourite = (v === 2); break;
+      case STAT_GUIDS.QUANTITY:       item.quantity  = typeof v === 'number' ? v : null; break;
+      case STAT_GUIDS.QUALITY:        item.rarity    = resolveRarity(stat.prototype); break;
+      case STAT_GUIDS.ARMOR_BASE:     item.armor     = (item.armor || 0) + v; break;
+      case STAT_GUIDS.DMG_BASE_MIN:   item.damageMin = v; break;
+      case STAT_GUIDS.DMG_BASE_MAX:   item.damageMax = v; break;
+      case STAT_GUIDS.DMG_TYPE:       if (stat.prototype) item.damageType = resolveGuid(stat.prototype); break;
+      case STAT_GUIDS.EQUIP_DMG_PCT:  item.damagePercent = (item.damagePercent || 0) + v; break;
+      case STAT_GUIDS.EQUIP_DMG_FLAT: item.damageFlat    = (item.damageFlat    || 0) + (typeof v === 'number' ? Math.round(v) : 0); break;
+      case STAT_GUIDS.RARE_NAME:      if (stat.string) item.rareName = stat.string; break;
+      case STAT_GUIDS.SOCKETS: {
+        const _sockN = (typeof v === 'number' && v > 0) ? v : 1;
+        item.socketCount = (item.socketCount || 0) + _sockN;
+        const _slotP = stat.params?.p0?.prototype || '';
+        const _isUniq = _slotP === '07826ea7c73d5df40b02785076596196';
+        for (let _q = 0; _q < _sockN; _q++) item.socketSlots.push(_isUniq ? 'unique' : 'common');
+        break;
+      }
+      case STAT_GUIDS.CORE_SOURCE:    if (stat.unitblueprint) item.heartSourceBp = stat.unitblueprint; break;
+      case STAT_GUIDS.EQUIP_ASPECT: {
+        const _asp = stat.params?.p0?.prototype || stat.prototype;
+        if (_asp) {
+          const _raw = (DH_GUIDS[_asp] || '').replace(/^Dye /i,'').replace(/ Appearance Aspect$/i,'').trim();
+          if (_raw) { item.dyeColor = _raw; item.dyeColors = _raw.split(/(?=[A-Z])/).map(s=>s.trim()).filter(Boolean); if (item.name.startsWith('Unknown')) item.name = 'Dye: ' + _raw; }
+        }
+        break;
+      }
+      case STAT_GUIDS.PROPERNAME: {
+        const _pn = resolveGuid(typeof v === 'string' ? v : stat.prototype);
+        if (_pn && item.name.startsWith('Unknown')) item.name = _pn;
+        break;
+      }
+      case STAT_GUIDS.COMPOSITION: {
+        const _cn = resolveGuid(typeof v === 'string' ? v : stat.prototype);
+        if (_cn && item.name.startsWith('Unknown')) item.name = _cn;
+        break;
+      }
+    }
+    if (stat.stat === 'cf4be72497e1b08459dbab29c64edab6' || stat.stat === '4267c6613bda4d94a99ef98fe962fce6')
+      _pushWitchSkillStat(stat, item.affixLines);
+  }
+}
+
+/**
+ * Post-stat finalizer: rune / gem / slot / typeDisplay / heart / dye / tome.
+ * Shared by stash + inventory — single source of truth.
+ */
+function _finalizeItemType(item, baName, charData) {
+  if (item.rareName && !item.legendaryName) item.name = item.rareName;
+  // ── Rune ──
+  if (baName) {
+    const _rnm = baName.match(/Rune\s+(\d+)\s+Item/i);
+    if (_rnm) {
+      const _n = String(parseInt(_rnm[1], 10));
+      item.runeNum = _n; item.runeName = _ITM_RUNE_NUM_TO_NAME[_n] || ('Rune ' + _n);
+      item.runeElement = _ITM_RUNE_NUM_TO_ELEM[_n] || null;
+      item.name = item.runeName; item.slot = 'rune'; item.slotDisplay = 'Rune';
+      item.rarity = item.rarity || 'Common';
+    }
+  }
+  // ── Gem ──
+  if (baName && !item.runeNum) {
+    const _gmm = baName.match(/^Gem\s+(\w+)\s+0?(\d+)\s+Item/i);
+    if (_gmm) {
+      item.gemType = _gmm[1].toLowerCase(); item.gemLevel = parseInt(_gmm[2], 10);
+      const _pfx = _ITM_GEM_LEVEL_PREFIX[item.gemLevel] || ('Gem ' + _gmm[1]);
+      item.name = _pfx + ' ' + _gmm[1].charAt(0).toUpperCase() + _gmm[1].slice(1).toLowerCase();
+      item.rarity = item.rarity || 'Common'; item.slot = item.slot || 'gem';
+    }
+  }
+  // ── Slot inference ──
+  if (!item.slot) {
+    const _inf = inferSlotFromName(item.name) || inferSlotFromName(baName || '');
+    if (_inf) { item.slot = _inf; item.slotDisplay = SLOT_DISPLAY[_inf] || _inf; }
+  }
+  if (!item.typeDisplay) item.typeDisplay = getItemTypeDisplay(baName, item.slot || '');
+  // ── Heart ──
+  if (item.heartSourceBp) {
+    const _srcBpName = DH_GUIDS[item.heartSourceBp] || '';
+    const _hBpName   = DH_GUIDS[item.blueprint]     || '';
+    let _bn = _HEART_NAMES_MAP[_srcBpName];
+    if (!_bn) _bn = _srcBpName ? _srcBpName.replace(/\s*(Unique|Boss)?\s*Unit\s*$/i,'').replace(/\s+/g,' ').trim() : item.heartSourceBp.slice(0,8)+'\u2026';
+    let _hRar='Common';
+    if (/\bChampion\b/i.test(_hBpName)) _hRar='Champion';
+    else if (/\bElite\b/i.test(_hBpName)) _hRar='Elite';
+    else if (/\bUnique\b/i.test(_hBpName)) _hRar='Unique';
+    let _hEl='fire';
+    if (/\bCold\b/i.test(_hBpName)) _hEl='cold';
+    else if (/\bFire\b/i.test(_hBpName)) _hEl='fire';
+    else if (/\bLightning\b/i.test(_hBpName)) _hEl='lightning';
+    else if (/\bNature\b/i.test(_hBpName)) _hEl='nature';
+    else if (/\bShadow\b/i.test(_hBpName)) _hEl='shadow';
+    const _pfx = _hRar==='Champion'?'Champion ':_hRar==='Elite'?'Elite ':'';
+    item.heartName=_pfx+_bn+' Heart'; item.name=item.heartName;
+    item.heartRarity=_hRar; item.heartElement=_hEl; item.heartSourceName=_bn;
+    item.heartIsUniqueSocket=_UNIQUE_HEART_MONSTERS.has(_srcBpName);
+    item.slot='core'; item.slotDisplay='Core';
+  }
+  // ── Dye ──
+  if (item.dyeColor && (item.name==='Dye'||item.name.endsWith(' Dye'))) {
+    const _dd = _ITM_DYE_BP[item.blueprint] || _ITM_DYE_NAMES[item.dyeColor];
+    if (_dd) { item.name=_dd+' Dye'; item.dyeName=_dd; item.typeDisplay='Common Dye'; }
+  }
+  // ── Tome usage ──
+  if (item.slot==='tome' && item.tomeTier && charData) {
+    const _bn2=(baName||'').toLowerCase();
+    const _ic=_bn2.includes('vigor')?(charData.stats.vitalityIntrinsic||0):_bn2.includes('might')?(charData.stats.strengthIntrinsic||0):_bn2.includes('agility')?(charData.stats.dexterityIntrinsic||0):_bn2.includes('power')?(charData.stats.magicIntrinsic||0):-1;
+    if (_ic>=0) item.tomeUsed=(_ic>=item.tomeTier);
+  }
+}
+
 function processCharacterData(data, digest) {
   const units = data?.units;
   if (!units?.length) throw new Error('No units in save data');
@@ -1755,203 +1898,9 @@ function processCharacterData(data, digest) {
       baseSpeed: (_stashItemDef && typeof _stashItemDef.baseSpeed === 'number') ? _stashItemDef.baseSpeed : null,
     };
 
-    for (const stat of unit.stats?.data ?? []) {
-      const { value: v } = readStat(stat);
-      switch (stat.stat) {
-        case STAT_GUIDS.LEVEL:         item.level    = v; break;
-        case STAT_GUIDS.ITEM_PROG_REQ: item.tomeTier = v; break;
-        case STAT_GUIDS.SKILL_TOME_REQ: item.tomeTier = item.tomeTier || v; break;
-        case STAT_GUIDS.STAT_REQ_BASE: item.tomeReqValue = v; item.tomeReqAttrProto = getReqAttrProto(stat); break;
-        case STAT_GUIDS.ITEM_MARK:     item.favourite = (v === 2); break;
-        case STAT_GUIDS.QUANTITY:      item.quantity = typeof v === 'number' ? v : null; break;
-        case STAT_GUIDS.QUALITY:       item.rarity = resolveRarity(stat.prototype); break;
-        case STAT_GUIDS.ARMOR_BASE:    item.armor  = (item.armor||0) + v; break;
-        case STAT_GUIDS.DMG_BASE_MIN:  item.damageMin = v; break;
-        case STAT_GUIDS.DMG_BASE_MAX:  item.damageMax = v; break;
-        case STAT_GUIDS.DMG_TYPE:      if (stat.prototype) item.damageType = resolveGuid(stat.prototype); break;
-        case STAT_GUIDS.EQUIP_DMG_PCT: item.damagePercent = (item.damagePercent || 0) + v; break;
-        case STAT_GUIDS.EQUIP_DMG_FLAT: item.damageFlat   = (item.damageFlat   || 0) + (typeof v === 'number' ? Math.round(v) : 0); break;
-        // EQUIP_ATK_SPD on item unit = intrinsic base speed, not a bonus; handled via baseSpeed table
-        case STAT_GUIDS.PROPERNAME: {
-          // Use the stored proper name if blueprint lookup failed
-          const pn = resolveGuid(typeof v === 'string' ? v : stat.prototype);
-          if (pn && item.name.startsWith('Unknown')) item.name = pn;
-          break;
-        }
-        case STAT_GUIDS.COMPOSITION: {
-          // Fallback name from item composition prototype
-          const cn = resolveGuid(typeof v === 'string' ? v : stat.prototype);
-          if (cn && item.name.startsWith('Unknown')) item.name = cn;
-          break;
-        }
-        case STAT_GUIDS.RARE_NAME:
-          if (stat.string) item.rareName = stat.string;
-          break;
-        case STAT_GUIDS.SOCKETS: {
-          const sockN2 = (typeof v === 'number' && v > 0) ? v : 1;
-          item.socketCount = (item.socketCount || 0) + sockN2;
-          const _slotP2 = stat.params?.p0?.prototype || '';
-          const _slotU2 = _slotP2 === '07826ea7c73d5df40b02785076596196';
-          for (let _q2 = 0; _q2 < sockN2; _q2++) item.socketSlots.push(_slotU2 ? 'unique' : 'common');
-          break;
-        }
-        case STAT_GUIDS.CORE_SOURCE:
-          if (stat.unitblueprint) item.heartSourceBp = stat.unitblueprint;
-          break;
-        case STAT_GUIDS.EQUIP_ASPECT: {
-          const asp2 = stat.params?.p0?.prototype || stat.prototype;
-          if (asp2) {
-            const raw2 = (DH_GUIDS[asp2] || '').replace(/^Dye /i,'').replace(/ Appearance Aspect$/i,'').trim();
-            if (raw2) {
-              item.dyeColor = raw2;
-              item.dyeColors = raw2.split(/(?=[A-Z])/).map(s => s.trim()).filter(Boolean);
-              if (item.name.startsWith('Unknown')) item.name = 'Dye: ' + raw2;
-            }
-          }
-          break;
-        }
-      }
-      // "+N to [Witch Skill]" stats stored directly on the item unit
-      if (stat.stat === 'cf4be72497e1b08459dbab29c64edab6' ||
-          stat.stat === '4267c6613bda4d94a99ef98fe962fce6') {
-        _pushWitchSkillStat(stat, item.affixLines);
-      }
-    }
-
-    // Apply rare name (overrides material name; legendary name applied later)
-    if (item.rareName && !item.legendaryName) item.name = item.rareName;
-    // Rune item detection: blueprint = "Rune N Item Unit"
-    const RUNE_NUM_TO_NAME = { '1':'Ash Rune', '2':'Bat Rune', '3':'Ka Rune', '4':'Deb Rune', '5':'Elm Rune' };
-    const RUNE_NUM_TO_ELEM = { '1':'Health', '2':'Blood', '3':'AoE', '4':'Defend', '5':'Life' };
-    if (baName) {
-      const runeNm = baName.match(/Rune\s+(\d+)\s+Item/i);
-      if (runeNm) {
-        const n = String(parseInt(runeNm[1], 10)); // normalize "05" → "5"
-        item.runeNum     = n;
-        item.runeName    = RUNE_NUM_TO_NAME[n] || ('Rune ' + n);
-        item.runeElement = RUNE_NUM_TO_ELEM[n] || null;
-        item.name = item.runeName;
-        item.slot = 'rune';
-        item.slotDisplay = 'Rune';
-        item.rarity = item.rarity || 'Common';
-      }
-    }
-    // Gem item detection: blueprint = "Gem {Type} {N} Item Unit"
-    if (baName) {
-      const gemNm = baName.match(/^Gem\s+(\w+)\s+0?(\d+)\s+Item/i);
-      if (gemNm) {
-        item.gemType  = gemNm[1].toLowerCase();  // 'amber', 'jade', etc.
-        item.gemLevel = parseInt(gemNm[2], 10);  // 1, 2, 3
-        const GEM_LEVEL_PREFIX = { 1:'Cracked', 2:'Flawed', 3:'Dull' };
-        const prefix = GEM_LEVEL_PREFIX[item.gemLevel] || ('Gem ' + gemNm[1]);
-        item.name = prefix + ' ' + gemNm[1].charAt(0).toUpperCase() + gemNm[1].slice(1).toLowerCase();
-        item.rarity = item.rarity || 'Common';
-        item.slot   = item.slot   || 'gem';
-      }
-    }
-    if (!item.slot) {
-      const inferredSlot = inferSlotFromName(item.name) || inferSlotFromName(DH_GUIDS[item.blueprint] || '');
-      if (inferredSlot) { item.slot = inferredSlot; item.slotDisplay = SLOT_DISPLAY[inferredSlot] || inferredSlot; }
-    }
-    // Set typeDisplay now that slot is known
-    if (!item.typeDisplay) item.typeDisplay = getItemTypeDisplay(baName, item.slot || '');
-    // Core hearts: resolve heartName from source monster blueprint
-    // Maps internal DH_GUIDS unit name → heart display name + rarity
-    if (item.heartSourceBp) {
-      const _srcBpName  = DH_GUIDS[item.heartSourceBp] || '';
-      const _heartBpName = DH_GUIDS[item.blueprint] || '';
-      let _baseName = _HEART_NAMES_MAP[_srcBpName];
-      if (!_baseName) {
-        if (_srcBpName) {
-          _baseName = _srcBpName.replace(/\s*(Unique|Boss)?\s*Unit\s*$/i,'').replace(/\s+/g,' ').trim();
-        } else {
-          _baseName = item.heartSourceBp.slice(0,8) + '…';
-        }
-      }
-      // Derive rarity and element from the heart's own blueprint
-      let _heartRarity = 'Common';
-      if (/\bChampion\b/i.test(_heartBpName))    _heartRarity = 'Champion';
-      else if (/\bElite\b/i.test(_heartBpName))  _heartRarity = 'Elite';
-      else if (/\bUnique\b/i.test(_heartBpName)) _heartRarity = 'Unique';
-
-      let _heartElement = 'fire';
-      if (/\bCold\b/i.test(_heartBpName))            _heartElement = 'cold';
-      else if (/\bFire\b/i.test(_heartBpName))        _heartElement = 'fire';
-      else if (/\bLightning\b/i.test(_heartBpName))   _heartElement = 'lightning';
-      else if (/\bNature\b/i.test(_heartBpName))      _heartElement = 'nature';
-      else if (/\bShadow\b/i.test(_heartBpName))      _heartElement = 'shadow';
-
-      const _namePrefix = _heartRarity === 'Champion' ? 'Champion '
-                        : _heartRarity === 'Elite'     ? 'Elite '
-                        : '';
-      item.heartName            = _namePrefix + _baseName + ' Heart';
-      item.name                 = item.heartName;
-      item.heartRarity          = _heartRarity;
-      item.heartElement         = _heartElement;
-      item.heartSourceName      = _baseName;   // canonical mob name, e.g. "Blight Roach"
-      item.heartIsUniqueSocket  = _UNIQUE_HEART_MONSTERS.has(_srcBpName);
-      item.slot        = 'core';
-      item.slotDisplay = 'Core';
-    }
-    // Dye items: resolve display name.
-    // Primary: blueprint GUID lookup (each dye type has a distinct blueprint in some save variants).
-    // Fallback: internal appearance-aspect color string mapping.
-    if (item.dyeColor && (item.name === 'Dye' || item.name.endsWith(' Dye'))) {
-      // Blueprint → dye display name (catalog prototype GUIDs from game data)
-      const _DYE_BP = {
-        'd55d2c9357213b4ee89318df52b30bc4': 'Cadet',
-        'f33b0a9357213b4ee89318df52b30bc4': 'Cinnibar',
-        'c34d9a9357213b4ee89318df52b30bc4': 'Eventide',
-        'e22a9f9357213b4ee89318df52b30bc4': 'Hornet',
-        'b23c8f9357213b4ee89318df52b30bc4': 'Kingfisher',
-        'f67a2d9357213b4ee89318df52b30bc4': 'Lion',
-        'b13c8f8d227448e89318df52b30bc412': 'Monarch',
-        'e89c4f9357213b4ee89318df52b30bc4': 'Nimbus',
-        'f90d5f9357213b4ee89318df52b30bc4': 'Queen of Night',
-        'e56f1c9357213b4ee89318df52b30bc4': 'Royal',
-        'a44c1b9357213b4ee89318df52b30bc4': 'Serengeti',
-        'd94acd9357213b4ee89318df52b30bc4': 'Syringa',
-        'd45e0b9357213b4ee89318df52b30bc4': 'Tigress',
-        'a78b3e9357213b4ee89318df52b30bc4': 'Ursa Major',
-      };
-      // Color string → dye display name (appearance aspect mapping — used when all dyes share one blueprint)
-      const _DYE_NAMES = {
-        'Orange Brown Copper':      'Achiote',
-        'Green Blue Steel':         'Cadet',
-        'Red Black Steel':          'Cardinal',
-        'Red White Copper':         'Cinnibar',
-        'Black White Bronze':       'Eventide',
-        'Yellow Black Copper':      'Hornet',
-        'Blue Orange Bronze':       'Kingfisher',
-        'Brown Yellow Copper':      'Lion',
-        'DarkBrown Orange Brass':   'Monarch',
-        'DarkBlue Yellow Brass':    'Myrmidon',
-        'White Blue Steel':         'Nimbus',
-        'Black Red Silver':         'Queen of Night',
-        'Purple Orange Bronze':     'Royal',
-        'Tan Brown Brass':          'Serengeti',
-        'LightPurple Green Bronze': 'Syringa',
-        'Orange Black Steel':       'Tigress',
-        'LightBlue Yellow Steel':   'Ursa Major',
-      };
-      const dyeDisplayName = _DYE_BP[item.blueprint] || _DYE_NAMES[item.dyeColor];
-      if (dyeDisplayName) {
-        item.name = dyeDisplayName + ' Dye';
-        item.dyeName = dyeDisplayName;
-        item.typeDisplay = 'Common Dye';
-      }
-    }
-    // Tome usage: cross-reference tomeTier against character intrinsics.
-    if (item.slot === 'tome' && item.tomeTier) {
-      const _bn = (baName || '').toLowerCase();
-      const _intrinsicCount =
-        _bn.includes('vigor')   ? (charData.stats.vitalityIntrinsic  || 0) :
-        _bn.includes('might')   ? (charData.stats.strengthIntrinsic  || 0) :
-        _bn.includes('agility') ? (charData.stats.dexterityIntrinsic || 0) :
-        _bn.includes('power')   ? (charData.stats.magicIntrinsic     || 0) :
-        -1;
-      if (_intrinsicCount >= 0) item.tomeUsed = (_intrinsicCount >= item.tomeTier);
-    }
+    // Parse stats and finalize type — shared helpers, DRY with inventory pass
+    _parseItemStatCore(unit, item);
+    _finalizeItemType(item, baName, charData);
 
     stashByIdx[i] = item;
     charData.stash.push(item);
@@ -2094,6 +2043,8 @@ function processCharacterData(data, digest) {
     const baName  = DH_GUIDS[bp];
     const baseName = baName ? normalizeName(baName) : `Unknown (${bp.slice(0,8)})`;
 
+    const _invItemDef = (typeof BASE_ITEMS !== 'undefined')
+      ? BASE_ITEMS.find(b => b.name === baseName) : null;
     const item = {
       name: baseName, slot: null, slotDisplay: null,
       typeDisplay: null,
@@ -2107,48 +2058,12 @@ function processCharacterData(data, digest) {
       affixLines: [], stashIndex: loc.index,
       bagNum: loc.index >> 16,     // row (0–5)
       bagCol: loc.index & 0xFFFF,  // col (0–14)
+      baseSpeed: (_invItemDef && typeof _invItemDef.baseSpeed === 'number') ? _invItemDef.baseSpeed : null,
     };
 
-    // Same stat parsing as stash pass
-    for (const stat of unit.stats?.data ?? []) {
-      const { value: v } = readStat(stat);
-      switch (stat.stat) {
-        case STAT_GUIDS.LEVEL:      item.level  = typeof v === 'number' ? v : null; break;
-        case STAT_GUIDS.QUALITY:    item.rarity = resolveRarity(v) || null; break;
-        case STAT_GUIDS.ARMOR_BASE: item.armor  = typeof v === 'number' ? v : null; break;
-        case STAT_GUIDS.DMG_BASE_MIN: item.damageMin = typeof v === 'number' ? v : null; break;
-        case STAT_GUIDS.DMG_BASE_MAX: item.damageMax = typeof v === 'number' ? v : null; break;
-        case STAT_GUIDS.QUANTITY:   item.quantity = typeof v === 'number' ? v : null; break;
-        case STAT_GUIDS.RARE_NAME:  item.rareName = null; break; // encoded as long
-        case STAT_GUIDS.ITEM_MARK:  item.dbid = unit.dbid || '0x0'; break;
-      }
-    }
-
-    // Rune detection
-    const _invRuneName = baName ? normalizeName(baName) : '';
-    const _invRuneM = _invRuneName.match(/^Rune\s+0*(\d+)/i);
-    if (_invRuneM) {
-      item.slot = 'rune';
-      const _rNum = parseInt(_invRuneM[1]);
-      const _RUNE_NAMES_INV = { 1:'Ash', 2:'Bat', 3:'Ka', 4:'Deb', 5:'Elm' };
-      item.name = (_RUNE_NAMES_INV[_rNum] || 'Rune') + ' Rune';
-      item.runeNum = _rNum;
-    }
-
-    // Gem detection — same pattern as stash
-    const _invGemBp = baName || '';
-    if (/\bGem\b/i.test(_invGemBp) || item.slot === 'gem') {
-      item.slot = 'gem';
-      const _gm = _invGemBp.match(/Gem\s+([A-Za-z]+)/i);
-      if (_gm) item.gemType = _gm[1].toLowerCase();
-    }
-
-    if (!item.rarity) {
-      if (item.slot === 'rune') item.rarity = 'Common';
-      else if (item.slot === 'gem') item.rarity = 'Common';
-    }
-
-    item.typeDisplay = getItemTypeDisplay(baName || '', item.slot || '');
+    // Parse stats and finalize type — same helpers as stash pass (DRY)
+    _parseItemStatCore(unit, item);
+    _finalizeItemType(item, baName, charData);
 
     charData.inventory.push(item);
     inventoryByIdx[i] = item;

@@ -541,6 +541,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (/\bheater\b|\bcarapace\b/.test(_shieldFull)) return {w:2,h:3};
       return {w:2,h:2};
     }
+    // Pick Axe is 1×3 — checked before SLOT_SIZE because inferSlotFromName sets
+    // slot='mainhand' (h:2) which would otherwise short-circuit to the wrong size.
+    if (/\bpick\s*axe\b/i.test(item.name)) return {w:1,h:3};
     if (item.slot && SLOT_SIZE[item.slot]) return SLOT_SIZE[item.slot];
     // Quick exits for stackable consumables
     if (item.gemType)  return {w:1,h:1};
@@ -562,6 +565,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const full = (item.name + ' ' + (item.typeDisplay||'')).toLowerCase().replace(/\d+/g, ' ');
     if (/\bchest\b|\brobe\b|\bvest\b|\btunic\b|\bharness\b|\barmor\b/.test(full)) return {w:2,h:3};
     if (/\bstaff\b|\bbow\b|\bpolearm\b|\bpike\b/.test(full))                       return {w:1,h:4};
+    if (/\bpick\s*axe\b/.test(full))                                               return {w:1,h:3};
     if (/\bheater\b|\bcarapace\b/.test(full))                                       return {w:2,h:3};
     if (/\btome\b|\bbook\b/.test(full))                                             return {w:2,h:2};
     if (/\bgloves?\b|\bboots?\b|\bhelm\b|\bcap\b|\bhood\b|\bveil\b|\bmask\b|\bshield\b|\bbuckler\b|\btarge\b/.test(full)) return {w:2,h:2};
@@ -2911,15 +2915,15 @@ const _dps = (_effSpd !== null)
 
     panelsRow.appendChild(detailPanel);
 
-    // ── Column 4: Stash + Inventory ─────────────────────────────────────────
-    const stashItems   = data.stash      || [];
-    // data.inventory removed — no confirmed player inventory
-    const CELL         = 30;
-    const STASH_COLS   = 15;
-    const STASH_ROWS   = 16;
-    // INV_COLS/INV_ROWS removed — no confirmed player inventory data
-
-    // Single stash view — no tab switching needed
+    // ── Column 4: Stash + Backpack ───────────────────────────────────────────
+    const stashItems     = data.stash      || [];
+    const inventoryItems = data.inventory  || [];
+    const CELL           = 30;
+    const STASH_COLS     = 15;
+    const STASH_ROWS     = 16;
+    const INV_COLS       = 15;
+    const INV_ROWS       = 6;
+    let   activeTab      = localStorage.getItem('dh_stash_tab') || 'stash';
 
     const stashPanel = document.createElement('div');
     stashPanel.id = 'stash-panel';
@@ -2946,24 +2950,46 @@ const _dps = (_effSpd !== null)
     }
     applyStashPanelStyle();
 
-    // ── Header ──
-    const stashHdr = document.createElement('div');
-    stashHdr.className = 'dh-stash-hdr';
-    const stashCountEl = document.createElement('span');
-    stashCountEl.className = 'dh-stash-count';
-    stashCountEl.textContent = stashItems.length + ' items';
+    // ── Single header row: tabs with plain counts + right-aligned toggle ──
+    const tabsEl = document.createElement('div');
+    tabsEl.className = 'dh-stash-tabs';
+
+    const tabStash = document.createElement('button');
+    tabStash.className = 'dh-stash-tab' + (activeTab === 'stash' ? ' dh-stash-tab--active' : '');
+    tabStash.innerHTML = 'Stash <span class="dh-tab-count">' + stashItems.length + '</span>';
+
+    const tabInv = document.createElement('button');
+    tabInv.className = 'dh-stash-tab' + (activeTab === 'inventory' ? ' dh-stash-tab--active' : '');
+    tabInv.innerHTML = 'Inventory <span class="dh-tab-count">' + inventoryItems.length + '</span>';
+
     const toggleBtn = document.createElement('button');
-    toggleBtn.title = stashViewMode === 'list' ? 'Switch to grid view' : 'Switch to list view';
     toggleBtn.className = 'dh-stash-toggle';
     toggleBtn.innerHTML = stashViewMode === 'list' ? SVG_GRID : SVG_LIST;
-    const stashTitleEl = document.createElement('span');
-    stashTitleEl.textContent = 'Stash';
-    stashHdr.appendChild(stashTitleEl);
-    stashHdr.appendChild(stashCountEl);
-    stashHdr.appendChild(toggleBtn);
-    stashPanel.appendChild(stashHdr);
 
-    // Tab bar removed — stash-only panel
+    tabsEl.appendChild(tabStash);
+    tabsEl.appendChild(tabInv);
+    tabsEl.appendChild(toggleBtn);
+    stashPanel.appendChild(tabsEl);
+
+    // ── Tab click handlers ──
+    function updateTabUI() {
+      tabStash.className = 'dh-stash-tab' + (activeTab === 'stash'     ? ' dh-stash-tab--active' : '');
+      tabInv.className   = 'dh-stash-tab' + (activeTab === 'inventory' ? ' dh-stash-tab--active' : '');
+    }
+    tabStash.addEventListener('click', () => {
+      if (activeTab === 'stash') return;
+      activeTab = 'stash';
+      localStorage.setItem('dh_stash_tab', activeTab);
+      updateTabUI();
+      rebuild();
+    });
+    tabInv.addEventListener('click', () => {
+      if (activeTab === 'inventory') return;
+      activeTab = 'inventory';
+      localStorage.setItem('dh_stash_tab', activeTab);
+      updateTabUI();
+      rebuild();
+    });
 
     // ── Content body ──
     const stashBody = document.createElement('div');
@@ -3200,19 +3226,22 @@ const _dps = (_effSpd !== null)
       gridArea.appendChild(cell);
     }
 
-    // ── Grid view (stash only: 15 cols × 16 rows) ──
+    // ── Grid view (stash: 15×16 rows, inventory: 15×6 rows) ──
     function buildGridView() {
+      const items = activeTab === 'inventory' ? inventoryItems : stashItems;
+      const cols  = activeTab === 'inventory' ? INV_COLS   : STASH_COLS;
+      const rows  = activeTab === 'inventory' ? INV_ROWS   : STASH_ROWS;
       stashBody.innerHTML = '';
       const gridWrap = document.createElement('div');
       gridWrap.className = 'dh-grid-wrap';
       const gridArea = document.createElement('div');
-      gridArea.style.cssText = 'position:relative;width:' + (STASH_COLS*CELL) + 'px;height:' + (STASH_ROWS*CELL) + 'px;flex-shrink:0;';
-      gridArea.appendChild(buildGridCanvas(STASH_COLS, STASH_ROWS));
-      stashItems.forEach(item => {
-        // bagNum IS the row (0-15), bagCol IS the col (0-14) — direct, no multiplication
+      gridArea.style.cssText = 'position:relative;width:' + (cols*CELL) + 'px;height:' + (rows*CELL) + 'px;flex-shrink:0;';
+      gridArea.appendChild(buildGridCanvas(cols, rows));
+      items.forEach(item => {
+        // bagNum IS the row, bagCol IS the col — direct, no multiplication
         const row = item.bagNum  ?? (item.stashIndex >> 16);
         const col = item.bagCol  ?? (item.stashIndex & 0xFFFF);
-        if (row >= 0 && row < STASH_ROWS && col >= 0 && col < STASH_COLS)
+        if (row >= 0 && row < rows && col >= 0 && col < cols)
           renderItemCell(item, col, row, gridArea);
       });
       gridWrap.appendChild(gridArea);
@@ -3221,8 +3250,8 @@ const _dps = (_effSpd !== null)
 
     // ── List view ──
     function buildListView() {
+      const items = activeTab === 'inventory' ? inventoryItems : stashItems;
       stashBody.innerHTML = '';
-      const items = stashItems;
       const list = document.createElement('div');
       list.className = 'dh-list-view';
       const rarityOrder = ['Legendary','Extraordinary','Rare','Magic','Common','Inferior'];
@@ -3393,30 +3422,9 @@ const _dps = (_effSpd !== null)
 
         const activeBranchNames = new Set(skillBranches.map(b => b.name));
 
-        // ── Tooltip system ────────────────────────────────────────────────────
-        let _skTip = null;
-        function ensureSkTip() {
-          if (_skTip) return _skTip;
-          _skTip = document.createElement('div');
-          _skTip.className = 'dh-sk-tip';
-          document.body.appendChild(_skTip);
-          document.addEventListener('mousemove', e => {
-            if (!_skTip || _skTip.style.display==='none') return;
-            const x = e.clientX + 18, y = e.clientY - 10;
-            const right = x + 310 > window.innerWidth;
-            _skTip.style.left = (right ? e.clientX - 320 : x) + 'px';
-            _skTip.style.top  = Math.max(4, y) + 'px';
-          });
-          return _skTip;
-        }
-        function showSkTip(html, x, y) {
-          const tip = ensureSkTip();
-          tip.innerHTML = html;
-          tip.style.display = 'block';
-          tip.style.left = (x+18)+'px';
-          tip.style.top  = Math.max(4, y-10)+'px';
-        }
-        function hideSkTip() { if (_skTip) _skTip.style.display='none'; }
+        // ── Tooltip system — reuses the shared tooltip (DRY) ─────────────────
+        const showSkTip = showStatTip;
+        const hideSkTip = hideTip;
 
         const DMG_COL = {Shadow:'#9d6aff',Physical:'#e0c060',Fire:'#ff7d44',Lightning:'#55aaff'};
 
