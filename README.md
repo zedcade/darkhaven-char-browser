@@ -4,7 +4,6 @@ An unofficial fan-made save file inspector for [Darkhaven](https://moonbeastgame
 
 ![Character Panel](img/screenshots/character_panel.png)
 
-
 ## How to use
 
 1. Open `index.html` in **Chrome, Edge, Opera, Brave or Firefox**
@@ -38,15 +37,26 @@ No installation, no server, no internet connection required. Everything runs loc
 - Socket overlays showing socketed gems, hearts, and runes using their actual in-game images
 - Hover any item for a full tooltip — affixes, sockets, requirements, legendary text
 
-**Stash**
+**Stash & Inventory**
 
 ![Stash Grid View](img/screenshots/stash_gridview.png)
 - Grid view: 15×16 stash grid with accurate item sizes and positions, item art, rarity borders
 - List view: sorted/filterable item list with thumbnails
+- Inventory section support alongside stash viewing
 - Core/Heart cells coloured by rarity (Common, Elite, Champion, Unique)
 - Item socket support, including socketed items
 - Favourite item tag support
 - Full item tooltips on hover
+
+**Puzzle Box**
+
+![Puzzle Box Panel](img/screenshots/puzzlebox.png)
+- Murakami's Puzzle Box recipe panel
+- Categorised recipe list with collapsible sections
+- Craft-count badges based on currently loaded materials
+- Runeword recipe expansion with inline editor support
+- Import/export/reset support for recipe definitions
+- Panel state and category collapse state saved between sessions
 
 **Skills**
 ![Skills Panel](img/screenshots/skills.png)
@@ -77,10 +87,21 @@ No installation, no server, no internet connection required. Everything runs loc
 - Fully mastered categories show a gold glow effect on the category card
 - Collapse/expand state saved between sessions
 
+**Item Scanner**
+
+![Item Scanner](img/screenshots/scanner.png)
+- Linked from the bottom of the character browser sidebar for quick access
+- OCR-based tooltip scanner for screenshots, with editable parsing before saving
+- Non-destructive crop tool to frame only the relevant part of a tooltip before re-parsing
+- Item Card preview for verifying parsed results against a Darkhaven-style tooltip render
+- Raw OCR, correction dictionary, weapon reference, and base item catalogue tabs for fixing recognition issues and maintaining local data
+
+
 **Multi-save support**
 - Loads all `.max` save files from a folder (and subfolders) at once
 - Groups saves by character, shows most recent per character by default
 - Configurable limit (default: 20 saves per character) to keep loading fast
+- This multi-save handling mainly exists to support older pre-alpha save layouts where several save files could exist per character; newer saves are generally singular files
 
 ---
 
@@ -89,7 +110,7 @@ No installation, no server, no internet connection required. Everything runs loc
 | File | Purpose | Required |
 |------|---------|----------|
 | `index.html` | App shell and layout | Yes |
-| `app.js` | UI rendering, tooltip system, stash grid, achievement rendering | Yes |
+| `app.js` | UI rendering, tooltip system, stash/inventory views, Puzzle Box, achievement rendering | Yes |
 | `app.css` | Main style definitions for page appearance | Yes |
 | `maxparser.js` | `.max` save file parser — decompression, stat extraction, item resolution | Yes |
 | `maxguids.js` | Blueprint GUID dictionary for all known entities in the Demo save format | Yes |
@@ -100,19 +121,19 @@ No installation, no server, no internet connection required. Everything runs loc
 | `darkhaven_save_format.md` | Analysis of the `.max` save format and its GUIDs (Demo version). Not needed to run, documentation only. | No |
 
 ## Folder structure
+
 | Folder | Contents | File pattern |
 |--------|----------|--------------|
 | `img/cores` | Heart images | `core_{rarity}_{element}_heart.png` |
 | `img/dyes` | Dye images | `{name}_dye.png` |
 | `img/gems` | Gem images | `gem_{type}_{nr}.png` — `01` Cracked · `02` Flawed · `03` Dull |
-| `img/items` | Item images | `{a/l/j/s/w}_{name}.png` — legendary items use `.webp` |
+| `img/items` | Item images | `{a/l/j/s/w}_{name}.png` |
 | `img/runes` | Rune images | `rune{nr}_{name}.png` — `01`–`05` |
 | `img/skills` | Skill & upgrade images | `skill_{option}_{name}.png` |
 | `img/tomes` | Tome images | `tome_of_{name}.png` |
 
-
 > **Adding or replacing images:** Place images in the appropriate `img/` subfolder following the naming convention, e.g. for `items`
-> (`a_` = armor, `j_` = jewelry, `s_` = shield, `w_` = weapon, `l_` = legendary `.webp`).
+> (`a_` = armor, `j_` = jewelry, `s_` = shield, `w_` = weapon, `l_` = legendary `.png`).
 > The app will load them automatically on the next scan.
 
 ---

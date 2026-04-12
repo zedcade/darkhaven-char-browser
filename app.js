@@ -26,12 +26,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // Keys: dh_collapsed_skills | dh_collapsed_tattoos | dh_collapsed_kill | dh_collapsed_legendary
   // Value: '1' = collapsed, '0' = expanded (default expanded = false)
   const LS_COLLAPSED = {
-    skills:    'dh_collapsed_skills',
-    tattoos:   'dh_collapsed_tattoos',
-    kill:      'dh_collapsed_kill',
-    legendary:     'dh_collapsed_legendary',
-    achievements:   'dh_collapsed_achievements',
-    stashView: 'dh_stash_view',
+    skills:       'dh_collapsed_skills',
+    tattoos:      'dh_collapsed_tattoos',
+    kill:         'dh_collapsed_kill',
+    legendary:    'dh_collapsed_legendary',
+    achievements: 'dh_collapsed_achievements',
+    puzzlebox:    'dh_collapsed_puzzlebox',
+    stashView:    'dh_stash_view',
   };
   function getPanelCollapsed(key) { return localStorage.getItem(LS_COLLAPSED[key]) === '1'; }
   function setPanelCollapsed(key, val) { localStorage.setItem(LS_COLLAPSED[key], val ? '1' : '0'); }
@@ -126,13 +127,44 @@ document.addEventListener('DOMContentLoaded', () => {
     resetFolderBtnEl.addEventListener('mouseleave', () => hideStatTip());
   }
   const IDB_NAME = 'darkhaven-browser', IDB_STORE = 'settings', IDB_KEY = 'folderHandle';
+  const PB_STORE = 'puzzlebox_recipes'; // puzzle box recipes store (added in v2)
   function idbOpen() {
     return new Promise((res, rej) => {
-      const req = indexedDB.open(IDB_NAME, 1);
-      req.onupgradeneeded = e => e.target.result.createObjectStore(IDB_STORE);
+      const req = indexedDB.open(IDB_NAME, 2); // v1=settings  v2=+puzzlebox_recipes
+      req.onupgradeneeded = e => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(IDB_STORE))
+          db.createObjectStore(IDB_STORE);
+        if (!db.objectStoreNames.contains(PB_STORE))
+          db.createObjectStore(PB_STORE, { keyPath: 'id' });
+      };
       req.onsuccess = e => res(e.target.result);
       req.onerror   = e => rej(e.target.error);
     });
+  }
+  async function idbGetAll(store) {
+    try {
+      const db = await idbOpen();
+      return new Promise((res, rej) => {
+        const tx  = db.transaction(store, 'readonly');
+        const req = tx.objectStore(store).getAll();
+        req.onsuccess = e => res(e.target.result || []);
+        req.onerror   = e => rej(e.target.error);
+      });
+    } catch(e) { return []; }
+  }
+  async function idbPutAll(store, items) {
+    try {
+      const db = await idbOpen();
+      return new Promise((res, rej) => {
+        const tx    = db.transaction(store, 'readwrite');
+        const os    = tx.objectStore(store);
+        os.clear();
+        for (const item of items) os.put(item);
+        tx.oncomplete = res;
+        tx.onerror    = e => rej(e.target.error);
+      });
+    } catch(e) { /* ignore */ }
   }
   async function idbGet(key) {
     try {
@@ -486,37 +518,37 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const LEG_IMAGES = {
-    'Legendary Amulet01': 'l_amulet01_heart_of_white_mountain.webp',
-    'Legendary Amulet02': 'l_amulet02_key_of_silver_flame.webp',
-    'Legendary Amulet03': 'l_amulet03_mouth_of_madness.webp',
-    'Legendary Belt01':   'l_belt01_misery_cord.webp',
-    'Legendary Belt03':   'l_belt03_war_godesses_girdle.webp',
-    'Legendary Boots01':  'l_boots01_hushpaws.webp',
-    'Legendary Boots02':  'l_boots02_twin_hurricanes.webp',
-    'Legendary Boots04':  'l_boots04_voidwalkers.webp',
-    'Legendary Chest01':  'l_chest01_nights_embrace.webp',
-    'Legendary Chest02':  'l_chest02_johanns_mystic_dreamcoat.webp',
-    'Legendary Chest07':  'l_chest07_bloody_bones.webp',
-    'Legendary Dagger01': 'l_dagger01_grimalkin.webp',
-    'Legendary Dagger02': 'l_dagger02_flickerfang.webp',
-    'Legendary Dagger03': 'l_dagger03_shiver.webp',
-    'Legendary Dagger04': 'l_dagger04_emberthorn.webp',
-    'Legendary Dagger06': 'l_dagger06_sorcere.webp',
-    'Legendary Flask01':  'l_flask01_holy_flask.webp',
-    'Legendary Flask03':  'l_flask03_name.webp',
-    'Legendary Gloves01': 'l_gloves01_fenix_fingers.webp',
-    'Legendary Gloves03': 'l_gloves03_johanns_bedazzlers.webp',
-    'Legendary Gloves06': 'l_gloves06_gloom_talon.webp',
-    'Legendary Helm01':   'l_helm01_executioners_hood.webp',
-    'Legendary Helm02':   'l_helm02_midnights_veil.webp',
-    'Legendary Helm06':   'l_helm06_visage_of_the_undying.webp',
-    'Legendary Ring01':   'l_ring01_bastion.webp',
-    'Legendary Ring02':   'l_ring02_johanns_glory.webp',
-    'Legendary Shield01': 'l_shield01_falce_di_luna.webp',
-    'Legendary Shield02': 'l_shield02_spearbreaker.webp',
-    'Legendary Staff01':  'l_staff01_wormwood_crook.webp',
-    'Legendary Staff02':  'l_staff02_the_golden_bough.webp',
-    'Legendary Staff05':  'l_staff05_the_arvinrod.webp',
+    'Legendary Amulet01': 'l_amulet01_heart_of_white_mountain.png',
+    'Legendary Amulet02': 'l_amulet02_key_of_silver_flame.png',
+    'Legendary Amulet03': 'l_amulet03_mouth_of_madness.png',
+    'Legendary Belt01':   'l_belt01_misery_cord.png',
+    'Legendary Belt03':   'l_belt03_war_godesses_girdle.png',
+    'Legendary Boots01':  'l_boots01_hushpaws.png',
+    'Legendary Boots02':  'l_boots02_twin_hurricanes.png',
+    'Legendary Boots04':  'l_boots04_voidwalkers.png',
+    'Legendary Chest01':  'l_chest01_nights_embrace.png',
+    'Legendary Chest02':  'l_chest02_johanns_mystic_dreamcoat.png',
+    'Legendary Chest07':  'l_chest07_bloody_bones.png',
+    'Legendary Dagger01': 'l_dagger01_grimalkin.png',
+    'Legendary Dagger02': 'l_dagger02_flickerfang.png',
+    'Legendary Dagger03': 'l_dagger03_shiver.png',
+    'Legendary Dagger04': 'l_dagger04_emberthorn.png',
+    'Legendary Dagger06': 'l_dagger06_sorcere.png',
+    'Legendary Flask01':  'l_flask01_holy_flask.png',
+    'Legendary Flask03':  'l_flask03_name.png',
+    'Legendary Gloves01': 'l_gloves01_fenix_fingers.png',
+    'Legendary Gloves03': 'l_gloves03_johanns_bedazzlers.png',
+    'Legendary Gloves06': 'l_gloves06_gloom_talon.png',
+    'Legendary Helm01':   'l_helm01_executioners_hood.png',
+    'Legendary Helm02':   'l_helm02_midnights_veil.png',
+    'Legendary Helm06':   'l_helm06_visage_of_the_undying.png',
+    'Legendary Ring01':   'l_ring01_bastion.png',
+    'Legendary Ring02':   'l_ring02_johanns_glory.png',
+    'Legendary Shield01': 'l_shield01_falce_di_luna.png',
+    'Legendary Shield02': 'l_shield02_spearbreaker.png',
+    'Legendary Staff01':  'l_staff01_wormwood_crook.png',
+    'Legendary Staff02':  'l_staff02_the_golden_bough.png',
+    'Legendary Staff05':  'l_staff05_the_arvinrod.png',
   };
 
   // ── Stash grid helpers ────────────────────────────────────────────────────
@@ -766,6 +798,17 @@ document.addEventListener('DOMContentLoaded', () => {
     _finalizeAchievements();
     renderAchievementsPanel();
 
+    // Show/hide limit toggle based on whether any character has >50 saves
+    // (no point showing it if nobody has that many files)
+    {
+      const _groups = groupFiles(loadedFiles);
+      const _maxPerChar = _groups.reduce((mx, g) => Math.max(mx, g.length), 0);
+      const _toggleWrapEl = limitToggle && (limitToggle.closest('.dh-toggle-wrap') || limitToggle.parentElement);
+      if (_toggleWrapEl) {
+        _toggleWrapEl.style.display = _maxPerChar > 50 ? '' : 'none';
+      }
+    }
+
     // Show warning banner if any files were locked by the game
     const _existingBanner = document.getElementById('dh-locked-banner');
     if (_existingBanner) _existingBanner.remove();
@@ -781,13 +824,10 @@ document.addEventListener('DOMContentLoaded', () => {
       _banner.querySelector('.dh-locked-banner-close').addEventListener('click', () => _banner.remove());
       fileListEl.parentElement.insertBefore(_banner, fileListEl);
     }
-    // Update button: show char count + rescan label
+    // Update button: show rescan label (no char/file count)
     {
-      const _nChars = groupFiles(loadedFiles).length;
-      const _nFiles = loadedFiles.length;
       openFolderBtn.innerHTML =
-        '<span class="btn-label">↺ Rescan Save Folder</span>' +
-        `<div class="btn-sublabel">${_nChars} character${_nChars!==1?'s':''} · ${_nFiles} file${_nFiles!==1?'s':''} scanned</div>`;
+        '<span class="btn-label">↺ Rescan Save Folder</span>';
     }
 
     // Update path display — prompt for path on first pick, else show stored
@@ -1052,7 +1092,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     const container = document.createElement('div');
-    container.style.cssText = 'padding:8px 12px 4px;';
+    container.className = 'dh-ach-container';
     achBody.appendChild(container);
 
     // ── Collapsible category section ──────────────────────────────────────────
@@ -1060,34 +1100,38 @@ document.addEventListener('DOMContentLoaded', () => {
       const lsKey = 'dh_ach_cat_' + catKey;
       let catCollapsed = localStorage.getItem(lsKey) !== '0'; // default: collapsed
       const wrap = document.createElement('div');
-      wrap.style.cssText = 'margin-bottom:8px;border:1px solid rgba(255,255,255,0.07);border-radius:8px;overflow:hidden;';
+      wrap.className = 'dh-ach-section';
 
       const hdr = document.createElement('div');
-      hdr.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;background:rgba(255,255,255,0.03);user-select:none;';
+      hdr.className = 'dh-ach-section-hdr';
       const allDone = earnedCount === totalCount;
       if (allDone) wrap.classList.add('dh-ach-cat--mastered');
-      hdr.innerHTML =
-        '<span style="font-size:.9rem;">' + icon + '</span>' +
-        '<span style="font-size:.8rem;font-weight:600;color:' + (allDone?'#d4a84b':'#ccc') + ';flex:1;">' +
-          (allDone?'\u2756 ':'') + esc(label) + '</span>' +
-        '<span style="font-size:.72rem;color:rgba(255,255,255,0.35);">' + earnedCount + '\u202F/\u202F' + totalCount + '</span>';
+      const iconEl = document.createElement('span');
+      iconEl.className = 'dh-ach-section-icon';
+      iconEl.textContent = icon;
+      const titleEl = document.createElement('span');
+      titleEl.className = 'dh-ach-section-title' + (allDone ? ' is-earned' : '');
+      titleEl.textContent = (allDone?'\u2756 ':'') + label;
+      const countEl = document.createElement('span');
+      countEl.className = 'dh-ach-section-count';
+      countEl.textContent = earnedCount + '\u202F/\u202F' + totalCount;
+      hdr.append(iconEl, titleEl, countEl);
 
       const tgl = document.createElement('span');
-      tgl.style.cssText = 'font-size:.75rem;color:rgba(255,255,255,0.35);margin-left:8px;transition:transform .15s;display:inline-block;';
+      tgl.className = 'dh-ach-section-toggle';
       tgl.textContent = '\u25BE';
-      if (catCollapsed) tgl.style.transform = 'rotate(-90deg)';
+      wrap.classList.toggle('is-collapsed', catCollapsed);
       hdr.appendChild(tgl);
       wrap.appendChild(hdr);
 
       const body = document.createElement('div');
-      body.style.cssText = 'padding:8px 10px 4px;display:' + (catCollapsed?'none':'block') + ';';
+      body.className = 'dh-ach-section-body';
       wrap.appendChild(body);
 
       hdr.addEventListener('click', () => {
         catCollapsed = !catCollapsed;
         localStorage.setItem(lsKey, catCollapsed?'1':'0');
-        body.style.display = catCollapsed ? 'none' : 'block';
-        tgl.style.transform = catCollapsed ? 'rotate(-90deg)' : '';
+        wrap.classList.toggle('is-collapsed', catCollapsed);
       });
 
       return { wrap, body };
@@ -1096,30 +1140,31 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── Plain achievement card ────────────────────────────────────────────────
     function makeAchCard(name, desc, isEarned, progress, progressMax) {
       const card = document.createElement('div');
-      card.style.cssText =
-        'background:' + (isEarned?'rgba(212,168,75,0.08)':'rgba(255,255,255,0.02)') + ';' +
-        'border:1px solid ' + (isEarned?'rgba(212,168,75,0.3)':'rgba(255,255,255,0.06)') + ';' +
-        'border-radius:6px;padding:8px 10px;margin-bottom:6px;';
+      card.className = 'dh-ach-card' + (isEarned ? ' is-earned' : '');
       const tr = document.createElement('div');
-      tr.style.cssText = 'display:flex;align-items:baseline;gap:8px;margin-bottom:2px;';
-      tr.innerHTML =
-        '<span style="font-size:.82rem;font-weight:600;color:' + (isEarned?'#d4a84b':'#aaa') + ';">' +
-          (isEarned?'\u2756 ':'') + esc(name) + '</span>' +
-        (progressMax > 0
-          ? '<span style="font-size:.7rem;color:rgba(255,255,255,0.3);margin-left:auto;white-space:nowrap;">' +
-              Math.min(progress,progressMax).toLocaleString() + '\u202F/\u202F' + progressMax.toLocaleString() + '</span>'
-          : '');
+      tr.className = 'dh-ach-card-row';
+      const nameEl = document.createElement('span');
+      nameEl.className = 'dh-ach-card-name' + (isEarned ? ' is-earned' : '');
+      nameEl.textContent = (isEarned?'\u2756 ':'') + name;
+      tr.appendChild(nameEl);
+      if (progressMax > 0) {
+        const countEl = document.createElement('span');
+        countEl.className = 'dh-ach-card-count';
+        countEl.textContent = Math.min(progress,progressMax).toLocaleString() + '\u202F/\u202F' + progressMax.toLocaleString();
+        tr.appendChild(countEl);
+      }
       card.appendChild(tr);
       const de = document.createElement('div');
-      de.style.cssText = 'font-size:.72rem;color:rgba(255,255,255,0.38);' + (progressMax>0?'margin-bottom:6px;':'');
+      de.className = 'dh-ach-card-desc' + (progressMax>0 ? ' has-progress' : '');
       de.textContent = desc;
       card.appendChild(de);
       if (progressMax > 0) {
         const bw = document.createElement('div');
-        bw.style.cssText = 'height:2px;background:rgba(255,255,255,0.07);border-radius:1px;overflow:hidden;';
+        bw.className = 'dh-ach-progress';
         const bf = document.createElement('div');
         const pct = Math.round(Math.min(progress,progressMax)/progressMax*100);
-        bf.style.cssText = 'height:100%;width:'+pct+'%;border-radius:1px;background:'+(isEarned?'#d4a84b':'#4a7fb5')+';';
+        bf.className = 'dh-ach-progress-fill' + (isEarned ? ' is-earned' : '');
+        bf.style.width = pct + '%';
         bw.appendChild(bf);
         card.appendChild(bw);
       }
@@ -1132,56 +1177,56 @@ document.addEventListener('DOMContentLoaded', () => {
       let expanded = localStorage.getItem(lsKey) === '1'; // default: collapsed
 
       const card = document.createElement('div');
-      card.style.cssText =
-        'background:' + (isEarned?'rgba(212,168,75,0.08)':'rgba(255,255,255,0.02)') + ';' +
-        'border:1px solid ' + (isEarned?'rgba(212,168,75,0.3)':'rgba(255,255,255,0.06)') + ';' +
-        'border-radius:6px;margin-bottom:6px;overflow:hidden;';
+      card.className = 'dh-ach-card dh-ach-card--expandable' + (isEarned ? ' is-earned' : '');
+      card.classList.toggle('is-expanded', expanded);
 
       const hdr = document.createElement('div');
-      hdr.style.cssText = 'padding:8px 10px;cursor:pointer;';
+      hdr.className = 'dh-ach-card-hdr';
 
       const tr = document.createElement('div');
-      tr.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:2px;';
-      tr.innerHTML =
-        '<span style="font-size:.82rem;font-weight:600;color:' + (isEarned?'#d4a84b':'#aaa') + ';flex:1;">' +
-          (isEarned?'\u2756 ':'') + esc(name) + '</span>' +
-        (progressMax > 0
-          ? '<span style="font-size:.7rem;color:rgba(255,255,255,0.3);white-space:nowrap;">' +
-              Math.min(progress,progressMax).toLocaleString() + '\u202F/\u202F' + progressMax.toLocaleString() + '</span>'
-          : '');
+      tr.className = 'dh-ach-card-row dh-ach-card-row--expandable';
+      const nameEl = document.createElement('span');
+      nameEl.className = 'dh-ach-card-name dh-ach-card-name--flex' + (isEarned ? ' is-earned' : '');
+      nameEl.textContent = (isEarned?'\u2756 ':'') + name;
+      tr.appendChild(nameEl);
+      if (progressMax > 0) {
+        const countEl = document.createElement('span');
+        countEl.className = 'dh-ach-card-count';
+        countEl.textContent = Math.min(progress,progressMax).toLocaleString() + '\u202F/\u202F' + progressMax.toLocaleString();
+        tr.appendChild(countEl);
+      }
       const tgl = document.createElement('span');
-      tgl.style.cssText = 'font-size:.7rem;color:rgba(255,255,255,0.3);transition:transform .15s;display:inline-block;flex-shrink:0;';
+      tgl.className = 'dh-ach-card-toggle';
       tgl.textContent = '\u25BE';
-      if (!expanded) tgl.style.transform = 'rotate(-90deg)';
       tr.appendChild(tgl);
       hdr.appendChild(tr);
 
       const de = document.createElement('div');
-      de.style.cssText = 'font-size:.72rem;color:rgba(255,255,255,0.38);' + (progressMax>0?'margin-bottom:6px;':'');
+      de.className = 'dh-ach-card-desc' + (progressMax>0 ? ' has-progress' : '');
       de.textContent = desc;
       hdr.appendChild(de);
 
       if (progressMax > 0) {
         const bw = document.createElement('div');
-        bw.style.cssText = 'height:2px;background:rgba(255,255,255,0.07);border-radius:1px;overflow:hidden;';
+        bw.className = 'dh-ach-progress';
         const bf = document.createElement('div');
         const pct = Math.round(Math.min(progress,progressMax)/progressMax*100);
-        bf.style.cssText = 'height:100%;width:'+pct+'%;border-radius:1px;background:'+(isEarned?'#d4a84b':'#4a7fb5')+';';
+        bf.className = 'dh-ach-progress-fill' + (isEarned ? ' is-earned' : '');
+        bf.style.width = pct + '%';
         bw.appendChild(bf);
         hdr.appendChild(bw);
       }
       card.appendChild(hdr);
 
       const subWrap = document.createElement('div');
-      subWrap.style.cssText = 'padding:0 8px 8px;display:' + (expanded?'block':'none') + ';';
+      subWrap.className = 'dh-ach-subwrap';
       subWrap.appendChild(makeSubFn());
       card.appendChild(subWrap);
 
       hdr.addEventListener('click', () => {
         expanded = !expanded;
         localStorage.setItem(lsKey, expanded?'1':'0');
-        subWrap.style.display = expanded ? 'block' : 'none';
-        tgl.style.transform = expanded ? '' : 'rotate(-90deg)';
+        card.classList.toggle('is-expanded', expanded);
       });
       return card;
     }
@@ -1189,32 +1234,25 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── Beast grid (sub-content for Hunter Extraordinaire) ────────────────────
     function makeBeastGrid() {
       const g = document.createElement('div');
-      g.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:4px;margin-top:8px;';
+      g.className = 'dh-ach-grid dh-ach-grid--beasts';
       const SHORT = {Normal:'N',Elite:'E',Champion:'C','Champion Minion':'M',Unique:'U',Boss:'B',Named:'\u2605'};
       for (const sp of BEAST_CATALOGUE) {
         const allK = sp.entries.every(e => state.beastKilled[e.bp+'|'+e.rarity]);
         const anyK = sp.entries.some(e => state.beastKilled[e.bp+'|'+e.rarity]);
         const cell = document.createElement('div');
-        cell.style.cssText =
-          'background:rgba(255,255,255,0.03);border:1px solid ' +
-          (allK?'rgba(212,168,75,0.3)':anyK?'rgba(255,255,255,0.1)':'rgba(255,255,255,0.05)') +
-          ';border-radius:4px;padding:5px 7px;';
+        cell.className = 'dh-ach-grid-cell' + (allK ? ' is-complete' : anyK ? ' is-partial' : '');
         const nm = document.createElement('div');
-        nm.style.cssText = 'font-size:.68rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' +
-          'color:'+(allK?'#d4a84b':anyK?'#ccc':'rgba(255,255,255,0.25)')+';margin-bottom:4px;';
+        nm.className = 'dh-ach-grid-name' + (allK ? ' is-complete' : anyK ? ' is-partial' : '');
         nm.textContent = (allK?'\u2756 ':'')+sp.species;
         cell.appendChild(nm);
         const dots = document.createElement('div');
-        dots.style.cssText = 'display:flex;gap:3px;flex-wrap:wrap;';
+        dots.className = 'dh-ach-grid-dots';
         for (const e of sp.entries) {
           const k = state.beastKilled[e.bp+'|'+e.rarity];
           const d = document.createElement('span');
           d.title = e.rarity + (k?' \u2713':' \u2014 not yet killed');
-          d.style.cssText =
-            'display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;' +
-            'border-radius:3px;font-size:.58rem;font-weight:700;background:' +
-            (k?(RARITY_DOT_COLOR[e.rarity]||'#888'):'rgba(255,255,255,0.06)') +
-            ';color:'+(k?'#111':'rgba(255,255,255,0.2)')+';';
+          d.className = 'dh-ach-grid-dot' + (k ? ' is-killed' : '');
+          if (k) d.style.background = RARITY_DOT_COLOR[e.rarity]||'#888';
           d.textContent = SHORT[e.rarity]||e.rarity[0];
           dots.appendChild(d);
         }
@@ -1229,32 +1267,25 @@ document.addEventListener('DOMContentLoaded', () => {
       const HEART_RC = { Common:'#9ca3af', Elite:'#60a5fa', Champion:'#c084fc', Unique:'#d4a84b' };
       const SHORT_H  = { Common:'N', Elite:'E', Champion:'C', Unique:'U' };
       const g = document.createElement('div');
-      g.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:4px;margin-top:8px;';
+      g.className = 'dh-ach-grid dh-ach-grid--hearts';
       const catalogue = (typeof HEART_CATALOGUE !== 'undefined') ? HEART_CATALOGUE : [];
       for (const entry of catalogue) {
         const allK = entry.rarities.every(r => state.heartsFound[entry.source+'|'+r]);
         const anyK = entry.rarities.some(r  => state.heartsFound[entry.source+'|'+r]);
         const cell = document.createElement('div');
-        cell.style.cssText =
-          'background:rgba(255,255,255,0.03);border:1px solid '+
-          (allK?'rgba(212,168,75,0.3)':anyK?'rgba(255,255,255,0.1)':'rgba(255,255,255,0.05)')+
-          ';border-radius:4px;padding:5px 7px;';
+        cell.className = 'dh-ach-grid-cell' + (allK ? ' is-complete' : anyK ? ' is-partial' : '');
         const nm = document.createElement('div');
-        nm.style.cssText = 'font-size:.68rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'+
-          'color:'+(allK?'#d4a84b':anyK?'#ccc':'rgba(255,255,255,0.25)')+';margin-bottom:4px;';
+        nm.className = 'dh-ach-grid-name' + (allK ? ' is-complete' : anyK ? ' is-partial' : '');
         nm.textContent = (allK?'\u2756 ':'')+entry.source;
         cell.appendChild(nm);
         const dots = document.createElement('div');
-        dots.style.cssText = 'display:flex;gap:3px;flex-wrap:wrap;';
+        dots.className = 'dh-ach-grid-dots';
         for (const rar of entry.rarities) {
           const found = !!state.heartsFound[entry.source+'|'+rar];
           const d = document.createElement('span');
           d.title = rar + (found?' \u2713':' \u2014 not yet found');
-          d.style.cssText =
-            'display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;'+
-            'border-radius:3px;font-size:.58rem;font-weight:700;background:'+
-            (found?(HEART_RC[rar]||'#888'):'rgba(255,255,255,0.06)')+
-            ';color:'+(found?'#111':'rgba(255,255,255,0.2)')+';';
+          d.className = 'dh-ach-grid-dot' + (found ? ' is-killed' : '');
+          if (found) d.style.background = HEART_RC[rar]||'#888';
           d.textContent = SHORT_H[rar]||rar[0];
           dots.appendChild(d);
         }
@@ -1271,7 +1302,7 @@ document.addEventListener('DOMContentLoaded', () => {
         Flask:'🧪', Gloves:'🧤', Helm:'🪖', Ring:'💍', 'Off Hand':'🛡️',
       };
       const wrap = document.createElement('div');
-      wrap.style.cssText = 'margin-top:8px;';
+      wrap.classList.add('dh-mt-8');
       const cats = [...new Set(LEGENDARY_CATALOGUE.map(e => e.cat))];
       for (const cat of cats) {
         const items = LEGENDARY_CATALOGUE.filter(e => e.cat === cat);
@@ -1434,12 +1465,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // so "FLAME LASH" renders with F and L visually dominant (like small-caps)
   function capsSkillHtml(text, color) {
     const isAllCaps = /^[A-Z][A-Z\s]+$/.test(text.trim());
-    if (!isAllCaps) return '<span style="color:' + color + ';">' + text + '</span>';
+    if (!isAllCaps) return '<span class="dh-dyn-color" style="--dh-dyn-color:' + color + ';">' + text + '</span>';
     const styled = text.replace(/\b([A-Z])([A-Z]+)/g,
       (_, first, rest) =>
-        '<span style="font-size:1.08em;letter-spacing:0.03em;">' + first + '</span>' +
-        '<span style="font-size:0.85em;letter-spacing:0.06em;">' + rest + '</span>');
-    return '<span style="color:' + color + ';">' + styled + '</span>';
+        '<span class="dh-caps-first">' + first + '</span>' +
+        '<span class="dh-caps-rest">' + rest + '</span>');
+    return '<span class="dh-dyn-color" style="--dh-dyn-color:' + color + ';">' + styled + '</span>';
   }
 
   function colorElements(str) {
@@ -1470,18 +1501,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const col  = ELEM_COLORS[key];
         const icon = ELEM_ICONS[key] || '';
         if (!col) return match;
-        return '<span style="color:' + col + ';">' + key + '</span>' +
-               (icon ? ' <span style="color:#e2e8f0;">(</span><span style="color:' + col + ';">' + icon + '</span><span style="color:#e2e8f0;">)</span>' : '');
+        return '<span class="dh-dyn-color" style="--dh-dyn-color:' + col + ';">' + key + '</span>' +
+               (icon ? ' <span class="dh-tip-neutral">(</span><span class="dh-dyn-color" style="--dh-dyn-color:' + col + ';">' + icon + '</span><span class="dh-tip-neutral">)</span>' : '');
       });
 
     // Pass 3: single attribute/resource/skill keywords (skip already-wrapped HTML)
     out = out.replace(/\bBlood\b(?![^<>]*>)/g,
-      () => '<span style="color:' + ATTR_BLUE + ';">Blood</span>');
+      () => '<span class="dh-dyn-color" style="--dh-dyn-color:' + ATTR_BLUE + ';">Blood</span>');
     out = out.replace(/\b(Mana|Strength|Dexterity|Vitality|Life|Glyph|Witch)\b(?![^<>]*>)/g,
-      (match, key) => '<span style="color:' + ATTR_BLUE + ';">' + key + '</span>');
+      (match, key) => '<span class="dh-dyn-color" style="--dh-dyn-color:' + ATTR_BLUE + ';">' + key + '</span>');
     // Magic: only standalone, not in 'Magic Find/Stat/Bonus/Steal/Resistance'
     out = out.replace(/\bMagic\b(?!\s+(?:Find|Stat|Bonus|Steal|Resistance))(?![^<>]*>)/g,
-      () => '<span style="color:' + ATTR_BLUE + ';">Magic</span>');
+      () => '<span class="dh-dyn-color" style="--dh-dyn-color:' + ATTR_BLUE + ';">Magic</span>');
     // Restore protected skill fragments
     out = out.replace(/\u0000SK(\d+)\u0000/g, (_, i) => _skillTokens[parseInt(i, 10)] || '');
     return out;
@@ -1723,7 +1754,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const _NO_PLUS_STATS = new Set(['Enhanced Armor']);
     for (const ln of _merged) {
       if (ln._header) {
-        h += '<div class="tip-affix-header" style="color:' + (ln.color || 'rgba(255,255,255,0.35)') + ';">' + esc(String(ln.text)) + '</div>';
+        h += '<div class="tip-affix-header" style="--dh-affix-header-color:' + (ln.color || 'rgba(255,255,255,0.35)') + ';">' + esc(String(ln.text)) + '</div>';
         continue;
       }
       const isSockLine = ln.socketed;
@@ -1754,7 +1785,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Pre-rendered HTML (e.g. imbue line) — bypass colorElements to avoid double icons
         lineHtml = '<span class="tip-affix-line">' + ln._html + '</span>';
       } else if (ln.text != null) {
-        lineHtml = '<span class="tip-affix-line" style="color:' + (ln.color || '#e2e8f0') + ';">' + colorElements(esc(String(ln.text))) + '</span>';
+        lineHtml = '<span class="tip-affix-line tip-affix-line--dyn" style="--dh-affix-line-color:' + (ln.color || '#e2e8f0') + ';">' + colorElements(esc(String(ln.text))) + '</span>';
       } else if (ln.isFlaskProp) {
         lineHtml = '<span class="tip-affix-line tip-affix-flask">' + esc(ln.name) + '</span>';
       } else if (isSockLine) {
@@ -1762,14 +1793,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const _sv = String(ln.value ?? '');
         const _svPfx = (_NO_PLUS_STATS.has(ln.name || '') || _sv.startsWith('+') || _sv.startsWith('-') || _sv.startsWith('0')) ? '' : '+';
         lineHtml = '<span class="tip-affix-line">' +
-          '<span class="tip-affix-val" style="color:#E8C342;">' + colorElements(esc(_svPfx + _sv)) + '</span>' +
+          '<span class="tip-affix-val tip-affix-val--gold">' + colorElements(esc(_svPfx + _sv)) + '</span>' +
           '<span class="tip-affix-name">' + colorElements(esc(ln.name ? ' ' + ln.name : '')) + '</span>' +
           '</span>';
       } else {
         const _rv = String(ln.value ?? '');
         const _rPfx = (_NO_PLUS_STATS.has(ln.name || '') || _rv.startsWith('+') || _rv.startsWith('-')) ? '' : '+';
         lineHtml = '<span class="tip-affix-line">' +
-          '<span class="tip-affix-val" style="color:#E8C342;">' + colorElements(esc(_rPfx + _rv)) + '</span>' +
+          '<span class="tip-affix-val tip-affix-val--gold">' + colorElements(esc(_rPfx + _rv)) + '</span>' +
           '<span class="tip-affix-name">' + colorElements(esc(ln.name ? ' ' + ln.name : '')) + '</span>' +
           '</span>';
       }
@@ -1817,7 +1848,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const _reqClass = String(req.value || '');
         const _charClass = _currentCharData?.class || '';
         const _classMet = !_reqClass || _charClass === _reqClass;
-        h += '<div class="tip-req-row"><span style="color:' + (_classMet ? '#eee' : '#ef4444') + ';">' + esc(_reqClass) + '</span></div>';
+        h += '<div class="tip-req-row"><span class="dh-tip-req-text" style="--dh-req-color:' + (_classMet ? '#eee' : '#ef4444') + ';">' + esc(_reqClass) + '</span></div>';
         continue;
       }
       const valStr   = String(req.value || '');
@@ -1829,19 +1860,19 @@ document.addEventListener('DOMContentLoaded', () => {
       const _statKey = STAT_KEY_MAP[reqType];
       const _charVal = _statKey ? (_cStats[_statKey] || 0) : _cLevel;
       const isMet    = _charVal >= reqNum;
-      h += '<div class="tip-req-row"><span style="color:' + (isMet ? '#eee' : '#ef4444') + ';">' + esc(reqType) + ' ' + reqNum + '</span></div>';
+      h += '<div class="tip-req-row"><span class="dh-tip-req-text" style="--dh-req-color:' + (isMet ? '#eee' : '#ef4444') + ';">' + esc(reqType) + ' ' + reqNum + '</span></div>';
     }
     if (item && item.heartIsUniqueSocket)
-      h += '<div class="tip-req-row"><span style="color:#d4a847;">Unique Socket</span></div>';
+      h += '<div class="tip-req-row"><span class="dh-tip-req-unique">Unique Socket</span></div>';
     // Attribute requirement from STAT_REQ_BASE — applies to equipment AND tomes
     if (_tomeAttr && item.tomeReqValue) {
       const _charAttrVal = _cStats[STAT_KEY_MAP[_tomeAttr] || ''] || 0;
       const _reqMet = _charAttrVal >= item.tomeReqValue;
-      h += '<div class="tip-req-row"><span style="color:' + (_reqMet ? '#eee' : '#ef4444') + ';">' + esc(_tomeAttr) + ' ' + item.tomeReqValue + '</span></div>';
+      h += '<div class="tip-req-row"><span class="dh-tip-req-text" style="--dh-req-color:' + (_reqMet ? '#eee' : '#ef4444') + ';">' + esc(_tomeAttr) + ' ' + item.tomeReqValue + '</span></div>';
     }
     // "Usable once" notice only applies to tomes
     if (_isTome)
-      h += '<div class="tip-req-row"><span style="color:#ef4444;">Usable once per character</span></div>';
+      h += '<div class="tip-req-row"><span class="dh-tip-req-error">Usable once per character</span></div>';
     h += '</div>';
     return h;
   }
@@ -2097,26 +2128,26 @@ const _dps = (_effSpd !== null)
         // DPS header row — sword icon white, value dark orange (#d4820a), larger font
         _headerHtml +=
           '<div class="tip-dmg-row tip-dps-row">' +
-          '<span class="tip-dmg-icon" style="color:#ffffff;">\u2694</span>' +
+          '<span class="tip-dmg-icon dh-tip-white">\u2694</span>' +
           '<span class="tip-dmg-val tip-dps-val">' +
-          '<span style="color:#d4820a;">' + (_dps % 1 === 0 ? _dps.toFixed(0) : _dps.toFixed(1)) + '</span>' +
-          ' <span style="color:#d4820a;">Damage/s</span>' +
+          '<span class="dh-tip-dps">' + (_dps % 1 === 0 ? _dps.toFixed(0) : _dps.toFixed(1)) + '</span>' +
+          ' <span class="dh-tip-dps">Damage/s</span>' +
           '</span></div>';
 
         // Helper: build one sub-line (└ + range + element + Damage)
         function _subRow(rangeHtml, elemHtml) {
           return '<div class="tip-dmg-row tip-dmg-subrow">' +
-            '<span class="tip-dmg-indent" style="color:#ffffff;">\u2514</span>' +
+            '<span class="tip-dmg-indent dh-tip-white">\u2514</span>' +
             '<span class="tip-dmg-subval">' + rangeHtml + elemHtml +
-            ' <span style="color:#e2e8f0;">Damage</span></span>' +
+            ' <span class="dh-tip-neutral">Damage</span></span>' +
             '</div>';
         }
 
         // Primary damage sub-line
-        const _pRange = '<span style="color:' + (_dmgElem ? _dmgCol : '#93c5fd') + ';">' + _calcMin + '\u2013' + _calcMax + '</span>';
+        const _pRange = '<span class="dh-dyn-color" style="--dh-dyn-color:' + (_dmgElem ? _dmgCol : '#93c5fd') + ';">' + _calcMin + '\u2013' + _calcMax + '</span>';
         const _pElem  = _dmgElem
-          ? ' <span style="color:' + _dmgCol + ';">' + esc(_dmgElem) + '</span>' +
-            (_dmgIcon ? ' <span style="color:#e2e8f0;">(</span><span style="color:' + _dmgCol + ';">' + _dmgIcon + '</span><span style="color:#e2e8f0;">)</span>' : '')
+          ? ' <span class="dh-dyn-color" style="--dh-dyn-color:' + _dmgCol + ';">' + esc(_dmgElem) + '</span>' +
+            (_dmgIcon ? ' <span class="dh-tip-neutral">(</span><span class="dh-dyn-color" style="--dh-dyn-color:' + _dmgCol + ';">' + _dmgIcon + '</span><span class="dh-tip-neutral">)</span>' : '')
           : '';
         _headerHtml += _subRow(_pRange, _pElem);
 
@@ -2124,33 +2155,33 @@ const _dps = (_effSpd !== null)
         for (const e of _elemDmgLines) {
           const _ec = ELEM_COLORS_TIP[e.elem] || '#f8d08a';
           const _ei = ELEM_ICONS_TIP[e.elem]  || '';
-          const _eRange = '<span style="color:' + _ec + ';">' + e.min + '\u2013' + e.max + '</span>';
-          const _eElem  = ' <span style="color:' + _ec + ';">' + esc(e.elem) + '</span>' +
-            (_ei ? ' <span style="color:#e2e8f0;">(</span><span style="color:' + _ec + ';">' + _ei + '</span><span style="color:#e2e8f0;">)</span>' : '');
+          const _eRange = '<span class="dh-dyn-color" style="--dh-dyn-color:' + _ec + ';">' + e.min + '\u2013' + e.max + '</span>';
+          const _eElem  = ' <span class="dh-dyn-color" style="--dh-dyn-color:' + _ec + ';">' + esc(e.elem) + '</span>' +
+            (_ei ? ' <span class="dh-tip-neutral">(</span><span class="dh-dyn-color" style="--dh-dyn-color:' + _ec + ';">' + _ei + '</span><span class="dh-tip-neutral">)</span>' : '');
           _headerHtml += _subRow(_eRange, _eElem);
         }
 
         // Attacks/s sub-line: yellow number, white label
         _headerHtml +=
           '<div class="tip-dmg-row tip-dmg-subrow">' +
-          '<span class="tip-dmg-indent" style="color:#ffffff;">\u2514</span>' +
+          '<span class="tip-dmg-indent dh-tip-white">\u2514</span>' +
           '<span class="tip-dmg-subval">' +
-          '<span style="color:#E8C342;">' + _effSpdDisp.toFixed(1) + '</span>' +
-          ' <span style="color:#e2e8f0;">Attacks/s</span>' +
+          '<span class="tip-affix-val--gold">' + _effSpdDisp.toFixed(1) + '</span>' +
+          ' <span class="dh-tip-neutral">Attacks/s</span>' +
           '</span></div>';
 
       } else {
         // No speed data — single damage row (no DPS)
         _headerHtml +=
           '<div class="tip-dmg-row">' +
-          '<span class="tip-dmg-icon" style="color:#ffffff;">\u2694</span>' +
+          '<span class="tip-dmg-icon dh-tip-white">\u2694</span>' +
           '<span class="tip-dmg-val tip-dps-val">' +
-          '<span style="color:' + (_dmgElem ? _dmgCol : '#93c5fd') + ';">' + _calcMin + '\u2013' + _calcMax + '</span>' +
+          '<span class="dh-dyn-color" style="--dh-dyn-color:' + (_dmgElem ? _dmgCol : '#93c5fd') + ';">' + _calcMin + '\u2013' + _calcMax + '</span>' +
           (_dmgElem
-            ? ' <span style="color:' + _dmgCol + ';">' + esc(_dmgElem) + '</span>' +
-              (_dmgIcon ? ' <span style="color:#e2e8f0;">(</span><span style="color:' + _dmgCol + ';">' + _dmgIcon + '</span><span style="color:#e2e8f0;">)</span>' : '')
+            ? ' <span class="dh-dyn-color" style="--dh-dyn-color:' + _dmgCol + ';">' + esc(_dmgElem) + '</span>' +
+              (_dmgIcon ? ' <span class="dh-tip-neutral">(</span><span class="dh-dyn-color" style="--dh-dyn-color:' + _dmgCol + ';">' + _dmgIcon + '</span><span class="dh-tip-neutral">)</span>' : '')
             : '') +
-          ' <span style="color:#e2e8f0;">Damage</span>' +
+          ' <span class="dh-tip-neutral">Damage</span>' +
           '</span></div>';
       }
     }
@@ -2207,9 +2238,9 @@ const _dps = (_effSpd !== null)
       const _iColor = _imbueColors[item.damageType] || '#e2e8f0';
       // Use _html to bypass colorElements (which would add a second icon to the element word)
       const _imbueHtml =
-        '<span style="color:' + _iColor + ';">' + esc(item.damageType) + '</span>' +
-        (_iIcon ? ' <span style="color:#e2e8f0;">(</span><span style="color:' + _iColor + ';">' + _iIcon + '</span><span style="color:#e2e8f0;">)</span>' : '') +
-        ' <span style="color:#e2e8f0;">Imbued</span>';
+        '<span class="dh-dyn-color" style="--dh-dyn-color:' + _iColor + ';">' + esc(item.damageType) + '</span>' +
+        (_iIcon ? ' <span class="dh-tip-neutral">(</span><span class="dh-dyn-color" style="--dh-dyn-color:' + _iColor + ';">' + _iIcon + '</span><span class="dh-tip-neutral">)</span>' : '') +
+        ' <span class="dh-tip-neutral">Imbued</span>';
       _affixLines.unshift({ _html: _imbueHtml });
     }
     if (item.runeNum && !_affixLines.length) {
@@ -2347,6 +2378,8 @@ const _dps = (_effSpd !== null)
       const classColors = { Witch:'#a855f7', Crusader:'#f59e0b', Hunter:'#22c55e', Technomancer:'#3b82f6' };
       const cc = classColors[charClass] || '#aaa';
 
+      const hasMultipleFiles = group.length > 1;
+
       // Character card (collapsed by default, first one expanded)
       const wrapper = document.createElement('li');
       wrapper.className = 'dh-char-wrapper';
@@ -2361,9 +2394,9 @@ const _dps = (_effSpd !== null)
             'Lv ' + charLevel +
             (charClass ? ' <span class="dh-char-cls-dot">·</span><span class="dh-char-cls" style="color:' + cc + ';">' + esc(charClass) + '</span>' : '') +
           '</div>' +
-          '<div class="dh-char-ts">' + tsStr + '</div>' +
+          '<div class="dh-char-ts">' + tsStr + ' &nbsp;<span class="dh-char-ts-name">' + esc(latest.name) + '</span></div>' +
         '</div>' +
-        '<div class="dh-char-arrow">▼</div>';
+        (hasMultipleFiles ? '<div class="dh-char-arrow">▼</div>' : '<div class="dh-char-arrow" style="visibility:hidden;">▼</div>');
 
       // File sub-list (hidden by default)
       const subList = document.createElement('ul');
@@ -2423,14 +2456,17 @@ const _dps = (_effSpd !== null)
       }
 
       // Card body click:
-      //   - already active → toggle file list expand/collapse (no re-load)
+      //   - already active → toggle file list expand/collapse (no re-load) — only if multiple files
       //   - different char  → load latest, mark active, collapse all file lists
       card.querySelector('.dh-char-info').addEventListener('click', () => {
         const isActive = card.classList.contains('dh-char-card--active');
         if (isActive) {
-          // Toggle this card's file list
-          if (card.dataset.expanded === 'true') { collapseCard(card); }
-          else { collapseAllOthers(); expandThisCard(); }
+          if (hasMultipleFiles) {
+            // Toggle this card's file list
+            if (card.dataset.expanded === 'true') { collapseCard(card); }
+            else { collapseAllOthers(); expandThisCard(); }
+          }
+          // Single-file cards: click on active card does nothing
         } else {
           collapseAllOthers();
           collapseCard(card);
@@ -2440,7 +2476,9 @@ const _dps = (_effSpd !== null)
       });
 
       // Triangle click → expand/collapse; if different char → also load + mark active
+      // Only attached when there are multiple files; hidden arrow has no effect
       arrow.addEventListener('click', (e) => {
+        if (!hasMultipleFiles) return;
         e.stopPropagation();
         const isExpanded = card.dataset.expanded === 'true';
         const isActive   = card.classList.contains('dh-char-card--active');
@@ -2506,7 +2544,7 @@ const _dps = (_effSpd !== null)
       console.error(err);
       if (err.name === 'NotReadableError') {
         elName.textContent = 'File locked by game';
-        detailView.innerHTML = '<div style="padding:2rem;color:rgba(255,255,255,0.4);font-size:.85rem;">' +
+        detailView.innerHTML = '<div class="dh-kill-empty">' +
           '⚠ This save file is currently locked by Darkhaven.<br><br>' +
           'Close the game and click Rescan to load this character.' +
           '</div>';
@@ -2550,14 +2588,14 @@ const _dps = (_effSpd !== null)
     header.innerHTML =
       '<div class="dh-char-hdr-icon">' +
         '<img src="./img/' + data.class.toLowerCase() + '.png" ' +
-        'onerror="this.outerHTML=\'<span style=&quot;font-size:2.2rem;opacity:0.5;&quot;>&#x1F6E1;&#xFE0F;</span>\'">' +
+        'onerror="this.outerHTML=\'<span class=&quot;dh-char-hdr-icon-fallback&quot;>&#x1F6E1;&#xFE0F;</span>\'">' +
       '</div>' +
       '<div class="dh-char-hdr-body">' +
         '<div class="dh-char-hdr-name-row">' +
           '<span class="dh-char-hdr-name">' + esc(data.name) + '</span>' +
           '<span class="dh-char-hdr-level">Level <span class="dh-char-hdr-level-num">' + data.level + '</span></span>' +
           '<span class="dh-char-hdr-dot">·</span>' +
-          '<span class="dh-char-hdr-class" style="color:' + classColor + ';">' + esc(data.class) + '</span>' +
+          '<span class="dh-char-hdr-class" style="--dh-class-color:' + classColor + ';">' + esc(data.class) + '</span>' +
         '</div>' +
         '<div class="dh-xp-wrap">' +
           '<div class="dh-xp-labels">' +
@@ -2565,7 +2603,7 @@ const _dps = (_effSpd !== null)
               ? '<span>XP: ' + xpCur.toLocaleString() + '</span><span>Next: ' + xpNext.toLocaleString() + '</span>'
               : '<span class="dh-xp-level-cap">Level Cap</span>') +
           '</div>' +
-          '<div class="dh-xp-track"><div class="dh-xp-fill" style="width:' + xpPct + '%;"></div></div>' +
+          '<div class="dh-xp-track"><div class="dh-xp-fill" style="--dh-xp-pct:' + xpPct + '%;"></div></div>' +
         '</div>' +
       '</div>';
 
@@ -2589,7 +2627,9 @@ const _dps = (_effSpd !== null)
       const cell = document.createElement('div');
       const isAltSlot = slotKey === 'hand_right_alt' || slotKey === 'hand_left_alt' || slotKey === 'hand_extra_alt' || slotKey === 'hand_extra_off';
       cell.className = 'dh-pd-cell' + (isAltSlot ? ' dh-pd-cell--alt' : '');
-      cell.style.cssText = 'grid-column:' + (pos.col+1) + ';grid-row:' + (pos.row+1) + ';';
+      cell.style.setProperty('--dh-grid-col', String(pos.col + 1));
+      cell.style.setProperty('--dh-grid-row', String(pos.row + 1));
+      cell.classList.add('dh-grid-pos');
 
       if (!item) {
         cell.classList.add('dh-pd-cell--empty');
@@ -2604,7 +2644,7 @@ const _dps = (_effSpd !== null)
         const _emptySlug = _EMPTY_IMG[slotKey];
         const _emptyImgSrc = _emptySlug ? 'img/paperdoll_' + _emptySlug + '_empty.png' : null;
         cell.innerHTML = _emptyImgSrc
-          ? '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">' +
+          ? '<div class="dh-pd-empty-wrap">' +
               '<img src="' + _emptyImgSrc + '" alt="" class="dh-pd-empty-img"' +
               ' onerror="this.parentNode.parentNode.innerHTML=\'<div class=&quot;dh-pd-cell-empty-inner&quot;><span class=&quot;dh-pd-cell-empty-icon&quot;>' + (SLOT_ICON[slotKey]||'⬜').replace(/'/g,"\\'") + '</span><span class=&quot;dh-pd-cell-empty-lbl&quot;>' + esc(SLOT_DISPLAY[slotKey]||slotKey) + '</span></div>\'">' +
             '</div>'
@@ -2646,7 +2686,7 @@ const _dps = (_effSpd !== null)
                 if (_si.type === 'gem')        _dotColor = gemColor(_si.name) || _dotColor;
                 else if (_si.type === 'heart') _dotColor = HEART_RARITY_COLORS_PD[_si.heartRarity || _si.rarity] || '#90ee90';
                 else if (_si.type === 'rune')  _dotColor = '#a78bfa';
-                dotInner = '<span style="font-size:0.44rem;color:' + _dotColor + ';">' + (_si.type==='heart'?'♥':_si.type==='rune'?'ᚱ':'◆') + '</span>';
+                dotInner = '<span class="dh-pd-sock-fallback" style="--dh-dot-color:' + _dotColor + ';">' + (_si.type==='heart'?'♥':_si.type==='rune'?'ᚱ':'◆') + '</span>';
               }
             }
             dotHtml += '<span class="' + dotClass + '">' + dotInner + '</span>';
@@ -2666,7 +2706,7 @@ const _dps = (_effSpd !== null)
         const _fbIcon = _fbT ? _fbIconMap[_fbT] : (SLOT_ICON[slotKey]||'&#x2699;&#xFE0F;');
         cell.innerHTML =
           (_pdImgSrc
-            ? '<img src="' + _pdImgSrc + '" alt="' + esc(dn) + '" class="' + _imgClass + '" onerror="this.style.display=\'none\';this.parentNode.innerHTML=\'<div style=&quot;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:2px;&quot;><span style=&quot;font-size:1.0rem;line-height:1;&quot;>' + _fbIcon + '</span><span style=&quot;font-size:0.38rem;text-transform:uppercase;letter-spacing:0.06em;opacity:0.3;&quot;>' + esc(item.slotDisplay) + '</span></div>\'">'
+            ? '<img src="' + _pdImgSrc + '" alt="' + esc(dn) + '" class="' + _imgClass + '" onerror="this.style.display=\'none\';this.parentNode.innerHTML=\'<div class=&quot;dh-pd-fallback-inner&quot;><span class=&quot;dh-pd-fallback-icon&quot;>' + _fbIcon + '</span><span class=&quot;dh-pd-fallback-lbl&quot;>' + esc(item.slotDisplay) + '</span></div>\'">'
             : '<div class="dh-pd-cell-empty-inner"><span class="dh-pd-cell-empty-icon">' + _fbIcon + '</span><span class="dh-pd-cell-empty-lbl">' + esc(item.slotDisplay) + '</span></div>'
           ) + sockOverlayHtml;
 
@@ -2698,7 +2738,7 @@ const _dps = (_effSpd !== null)
       const display = typeof val === 'number' ? fmtNum(Math.round(val)) + (suffix||'') : (val||'–');
       r.innerHTML =
         '<span class="dh-stat-label">' + label + '</span>' +
-        '<span class="dh-stat-val" style="color:' + color + ';">' + display + '</span>';
+        '<span class="dh-stat-val" style="--dh-stat-color:' + color + ';">' + display + '</span>';
       return r;
     }
 
@@ -2867,7 +2907,7 @@ const _dps = (_effSpd !== null)
       const display = hasVal ? (v + (suffix||'')) : (showZero ? '0' : '–');
       r.innerHTML =
         '<span class="dh-dash-label">' + label + '</span>' +
-        '<span class="dh-dash-val" style="color:' + (hasVal ? color : '#3a3a3a') + ';">' + display + '</span>';
+        '<span class="dh-dash-val" style="--dh-dash-color:' + (hasVal ? color : '#3a3a3a') + ';">' + display + '</span>';
       return r;
     }
 
@@ -2893,7 +2933,7 @@ const _dps = (_effSpd !== null)
       const hasWW = s.waterWalking > 0;
       wwRow.innerHTML =
         '<span class="dh-dash-label">Water Walking</span>' +
-        '<span class="dh-dash-val" style="color:' + (hasWW ? '#67e8f9' : '#3a3a3a') + ';">' + (hasWW ? '✓' : '–') + '</span>';
+        '<span class="dh-dash-val" style="--dh-dash-color:' + (hasWW ? '#67e8f9' : '#3a3a3a') + ';">' + (hasWW ? '✓' : '–') + '</span>';
       detailPanel.appendChild(wwRow);
     }
     {
@@ -2902,7 +2942,7 @@ const _dps = (_effSpd !== null)
       const hasFF = !!s.featherFalling;
       ffRow.innerHTML =
         '<span class="dh-dash-label">Feather Falling</span>' +
-        '<span class="dh-dash-val" style="color:' + (hasFF ? '#67e8f9' : '#3a3a3a') + ';">' + (hasFF ? '✓' : '–') + '</span>';
+        '<span class="dh-dash-val" style="--dh-dash-color:' + (hasFF ? '#67e8f9' : '#3a3a3a') + ';">' + (hasFF ? '✓' : '–') + '</span>';
       detailPanel.appendChild(ffRow);
     }
 
@@ -3117,7 +3157,7 @@ const _dps = (_effSpd !== null)
         cell.style.alignItems = 'center'; cell.style.justifyContent = 'center'; cell.style.padding = '2px';
         const imgEl = document.createElement('img');
         // 2H weapons (h=4): use vertical _v.png variant for better display in tall stash cell
-        // Derive slug from LEG_IMAGES filename: 'l_staff01_wormwood_crook.webp' → 'wormwood_crook'
+        // Derive slug from LEG_IMAGES filename: 'l_staff01_wormwood_crook.png' → 'wormwood_crook'
         if (h === 4) {
           const _legFile = LEG_IMAGES[item.legendaryName] || '';
           const _legSlug = _legFile.replace(/^l_[a-z]+\d+_/, '').replace(/\.\w+$/, '');
@@ -3342,6 +3382,8 @@ const _dps = (_effSpd !== null)
 
     outerWrap.appendChild(panelsRow);
 
+    // ── Puzzle Box Panel ──────────────────────────────────────────────────────
+    outerWrap.appendChild(renderPuzzleBoxPanel(data));
 
     // ── Bottom row: Skills (full width) then Kill Log below ─────────────────
     const skillBranches = data.skillBranches || [];
@@ -3479,11 +3521,9 @@ const _dps = (_effSpd !== null)
           const isBranchActive = [...activeBranchNames].some(n => n.includes(branch.match));
           const bStyle = BRANCH_STYLES[branch.key] || BRANCH_STYLES['Shadow'];
           const bHdr = document.createElement('div');
-          bHdr.className = 'dh-branch-hdr';
-          bHdr.style.cssText =
-            'background:' + (isBranchActive ? bStyle.active : bStyle.inactive) + ';' +
-            'border:1px solid ' + (isBranchActive ? bStyle.border : bStyle.borderI) + ';' +
-            (isBranchActive ? 'color:#ffffff;text-shadow:0 1px 4px rgba(0,0,0,0.8);' : 'color:rgba(255,255,255,0.2);');
+          bHdr.className = 'dh-branch-hdr' + (isBranchActive ? ' is-active' : ' is-inactive');
+          bHdr.style.setProperty('--dh-branch-bg', isBranchActive ? bStyle.active : bStyle.inactive);
+          bHdr.style.setProperty('--dh-branch-border', isBranchActive ? bStyle.border : bStyle.borderI);
           bHdr.textContent = branch.key;
           branchGrid.appendChild(bHdr);
         }
@@ -3535,7 +3575,7 @@ const _dps = (_effSpd !== null)
             const nameRow = document.createElement('div');
             nameRow.className = 'dh-sk-name-row';
             nameRow.innerHTML =
-              '<span class="dh-sk-name-txt" style="color:' + (isActive?'#ddd':'#555') + ';">' + esc(skDef.display) + '</span>' +
+              '<span class="dh-sk-name-txt ' + (isActive ? 'is-active' : 'is-inactive') + '">' + esc(skDef.display) + '</span>' +
               (isActive
                 ? '<span class="dh-sk-lv-badge" title="' + esc('Base '+skData.level+(bonusParts.length?' · '+bonusParts.join(' · '):'')) + '">Lv&nbsp;' + totalLv + (bonusParts.length?' ★':'') + '</span>'
                 : '<span class="dh-sk-locked">Locked</span>');
@@ -3544,21 +3584,21 @@ const _dps = (_effSpd !== null)
             tagRow.className = 'dh-sk-tag-row';
             tagRow.innerHTML =
               '<span class="dh-sk-tag-dmg" style="color:' + (isActive?(DMG_COL[skDef.dmg]||'#888'):'#444') + ';">' + skDef.dmg + '</span>' +
-              (skDef.cost !== '—' ? '<span class="dh-sk-tag-cost" style="color:' + (isActive?'#5599cc':'#3a3a3a') + ';">· ' + skDef.cost + '</span>' : '') +
-              '<span class="dh-sk-tag-type" style="color:' + (isActive?'#666':'#333') + ';">· ' + skDef.tag + '</span>';
+              (skDef.cost !== '—' ? '<span class="dh-sk-tag-cost ' + (isActive ? 'is-active' : 'is-inactive') + '">· ' + skDef.cost + '</span>' : '') +
+              '<span class="dh-sk-tag-type ' + (isActive ? 'is-active' : 'is-inactive') + '">· ' + skDef.tag + '</span>';
             info.appendChild(tagRow);
             topRow.appendChild(info);
             card.appendChild(topRow);
 
             // ── Skill tooltip ──────────────────────────────────────────────
             const skTipHtml =
-              '<div class="sk-tip-name" style="color:' + (isActive?'#e8d48a':'#888') + ';">' + esc(skDef.display) + '</div>' +
+              '<div class="sk-tip-name ' + (isActive ? 'is-active' : 'is-inactive') + '">' + esc(skDef.display) + '</div>' +
               '<div class="sk-tip-desc">' + esc(skDef.desc) + '</div>' +
               '<div class="sk-tip-tags">' +
                 (skDef.dmg && skDef.dmg !== '—' ? '<span class="sk-tip-tag-dmg" style="color:' + (DMG_COL[skDef.dmg]||'#888') + ';">' + skDef.dmg + '</span>' : '') +
-                (skDef.scaling && skDef.scaling !== '—' ? '<span class="sk-tip-tag-cost" style="color:#8899aa;">' + esc(skDef.scaling) + '</span>' : '') +
+                (skDef.scaling && skDef.scaling !== '—' ? '<span class="sk-tip-tag-cost sk-tip-tag-cost--scaling">' + esc(skDef.scaling) + '</span>' : '') +
                 (skDef.cost !== '—' ? '<span class="sk-tip-tag-cost">' + skDef.cost + '</span>' : '') +
-                (skDef.requires ? '<span class="sk-tip-tag-cost" style="color:#c9a84c;">Requires: ' + esc(skDef.requires) + '</span>' : '') +
+                (skDef.requires ? '<span class="sk-tip-tag-cost sk-tip-tag-cost--requires">Requires: ' + esc(skDef.requires) + '</span>' : '') +
               '</div>' +
               (isActive
                 ? '<div class="sk-tip-level">Level ' + skData.level +
@@ -3588,8 +3628,8 @@ const _dps = (_effSpd !== null)
               const _imgTint   = isUActive ? 'filter:none;opacity:0.9' : 'filter:grayscale(1);opacity:0.3';
               optRow.innerHTML =
                 `<img src="${_upgImgSrc}" width="14" height="14" style="flex-shrink:0;${_imgTint};object-fit:contain;image-rendering:crisp-edges;" onerror="this.style.display='none'">` +
-                `<span class="dh-upg-name" style="color:${nameColor};font-weight:${isUActive?600:400};">${esc(upg.name)}</span>` +
-                `<span class="dh-upg-lv" style="color:${lvColor};font-weight:${isFull?700:400};">${isUActive?upgLv+'/'+upg.max:'—/'+upg.max}</span>`;
+                `<span class="dh-upg-name ${isUActive?'dh-upg-name--active':'dh-upg-name--inactive'}" style="--dh-upg-name-color:${nameColor};">${esc(upg.name)}</span>` +
+                `<span class="dh-upg-lv ${isFull?'dh-upg-lv--full':'dh-upg-lv--normal'}" style="--dh-upg-lv-color:${lvColor};">${isUActive?upgLv+'/'+upg.max:'—/'+upg.max}</span>`;
 
               // Upgrade tooltip
               const _upgDesc = upg.levels
@@ -3606,12 +3646,12 @@ const _dps = (_effSpd !== null)
               // Upgrade tooltip — image top-right via buildTipImg
               const _upgImgSrcFull = `./img/skills/skill_option_${_upgImgSlug}.png`;
               const _upgTipContent =
-                `<div class="upg-tip-name" style="color:${isUActive?'#e8d48a':'#666'};">${esc(upg.name)}</div>` +
+                `<div class="upg-tip-name ${isUActive?'upg-tip-name--active':'upg-tip-name--inactive'}">${esc(upg.name)}</div>` +
                 `<div class="upg-tip-desc">${esc(_upgDesc)}</div>` +
                 _glyphBonusHtml +
                 (isUActive
-                  ? `<div class="upg-tip-level" style="color:#c44a30;">Level ${upgLv} / ${upg.max}${isFull?' <span class="sk-tip-bonus">★ MAX</span>':''}</div>`
-                  : `<div class="upg-tip-level" style="color:#555;">Not unlocked · Max: ${upg.max}</div>`);
+                  ? `<div class="upg-tip-level upg-tip-level--active">Level ${upgLv} / ${upg.max}${isFull?' <span class="sk-tip-bonus">★ MAX</span>':''}</div>`
+                  : `<div class="upg-tip-level upg-tip-level--inactive">Not unlocked · Max: ${upg.max}</div>`);
               const upgTipHtml = buildTipImg(
                 _upgImgSrcFull,
                 _upgTipContent,
@@ -3859,19 +3899,16 @@ const _dps = (_effSpd !== null)
 
           function makeSortHdr(label, col, align) {
             const span = document.createElement('span');
-            span.className = 'dh-kill-sort-hdr' + (align === 'right' ? ' dh-kill-sort-hdr--right' : '');
-            span.style.color = 'rgba(255,255,255,0.25)';
-            const updateHdr = () => {
+            span.className = 'dh-kill-hdr-cell' + (align === 'right' ? ' dh-kill-hdr-cell--right' : '');
+                        const updateHdr = () => {
               const active = _killSortCol === col;
-              span.style.color = active ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.25)';
+              span.classList.toggle('is-active', active);
               span.innerHTML = esc(label) +
                 '<span class="dh-kill-sort-arrow">' +
                 (active ? (_killSortDir === -1 ? '↓' : '↑') : '⇅') +
                 '</span>';
             };
             updateHdr();
-            span.addEventListener('mouseenter', () => { if (_killSortCol !== col) span.style.color = 'rgba(255,255,255,0.5)'; });
-            span.addEventListener('mouseleave', () => { if (_killSortCol !== col) span.style.color = 'rgba(255,255,255,0.25)'; });
             span.addEventListener('click', () => {
               if (_killSortCol === col) _killSortDir *= -1;
               else { _killSortCol = col; _killSortDir = col === 'name' ? 1 : -1; }
@@ -3883,19 +3920,19 @@ const _dps = (_effSpd !== null)
             return span;
           }
 
-          tblHdr.style.cssText = 'display:grid;grid-template-columns:1fr 130px 56px;width:100%;box-sizing:border-box;';
-          tblHdr.appendChild(makeSortHdr('Monster', 'name', 'left'));
-          tblHdr.appendChild(makeSortHdr('Rarity',  'rarity', 'left'));
-          tblHdr.appendChild(makeSortHdr('Count',   'count', 'right'));
-          killBody.appendChild(tblHdr);
-
-          // Scrollable body — no row cap, scrollable container
+          // Fixed header + scrollable body
           const ROW_H = 26;
           const MAX_VISIBLE = 12;
           const tblBody = document.createElement('div');
           tblBody.className = 'dh-kill-tbl-body';
           tblBody.style.maxHeight = (ROW_H * MAX_VISIBLE) + 'px';
           tblBody.style.overflowY = 'auto';
+
+          tblHdr.className = 'dh-kill-tbl-hdr dh-scan-grid-row';
+          tblHdr.appendChild(makeSortHdr('Monster', 'name', 'left'));
+          tblHdr.appendChild(makeSortHdr('Rarity',  'rarity', 'left'));
+          tblHdr.appendChild(makeSortHdr('Count',   'count', 'right'));
+          killBody.appendChild(tblHdr);
 
           function rebuildRows() {
             tblBody.innerHTML = '';
@@ -3905,14 +3942,12 @@ const _dps = (_effSpd !== null)
               const row = document.createElement('div');
               const isLast = idx === entries.length - 1;
               row.className = 'dh-kill-row' + (isLast ? ' dh-kill-row--last' : '');
-              row.style.cssText = 'display:grid;grid-template-columns:1fr 130px 56px;width:100%;box-sizing:border-box;';
+              row.className += ' dh-scan-grid-row';
               row.innerHTML =
-                '<span class="dh-kill-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">' + esc(entry.name) + '</span>' +
-                '<span class="dh-kill-rarity" style="color:' + rc + ';white-space:nowrap;">' + esc(entry.rarity || '–') + '</span>' +
-                '<span class="dh-kill-count" style="white-space:nowrap;">' + entry.count.toLocaleString() + '</span>';
-              row.addEventListener('mouseenter', () => row.style.background = 'rgba(255,255,255,0.035)');
-              row.addEventListener('mouseleave', () => row.style.background = '');
-              tblBody.appendChild(row);
+                '<span class="dh-kill-name dh-kill-name--truncate">' + esc(entry.name) + '</span>' +
+                '<span class="dh-kill-rarity dh-kill-rarity--nowrap" style="--dh-kill-rarity:' + rc + ';">' + esc(entry.rarity || '–') + '</span>' +
+                '<span class="dh-kill-count dh-kill-count--nowrap">' + entry.count.toLocaleString() + '</span>';
+                            tblBody.appendChild(row);
             });
           }
           rebuildRows();
@@ -4031,4 +4066,528 @@ const _dps = (_effSpd !== null)
            `<img src="${imgSrc}" class="${cls}"${styleAttr} onerror="this.style.display='none'">` +
            `</div>`;
   }
+
+  // ============================================================
+  // ── Murakami's Puzzle Box Panel ─────────────────────────────
+  // ============================================================
+  // Uses darkhaven-browser IDB v2 / puzzlebox_recipes store.
+  // All tooltip calls use showStatTip/moveStatTip/hideStatTip directly.
+  // ============================================================
+  {
+    const PB_CATEGORY_ORDER = [
+      'Dye Recipes','Gem Recipes','Imbue Recipes',
+      'Magic Rerolls','Rare Rerolls','Rune Recipes','Runewords','Socket Recipes',
+    ];
+    const PB_CATEGORY_ICON = {
+      'Dye Recipes':'🎨','Gem Recipes':'💎','Imbue Recipes':'🔥',
+      'Magic Rerolls':'🔵','Rare Rerolls':'🟡','Rune Recipes':'★',
+      'Runewords':'✨','Socket Recipes':'⬡',
+    };
+    const PB_MAT_IMG = {
+      ash_rune:'./img/runes/rune01_ash.png', bat_rune:'./img/runes/rune02_bat.png',
+      ka_rune:'./img/runes/rune03_ka.png',   deb_rune:'./img/runes/rune04_deb.png',
+      elm_rune:'./img/runes/rune05_elm.png', rune_any:'./img/runes/rune01_ash.png',
+      cracked_gem_any:'./img/gems/gem_amber_01.png', cracked_gem_same:'./img/gems/gem_amber_01.png',
+      flawed_gem_any:'./img/gems/gem_amber_02.png',  flawed_gem_same:'./img/gems/gem_amber_02.png',
+      dull_gem_any:'./img/gems/gem_amber_03.png',
+      cracked_ruby:'./img/gems/gem_ruby_01.png',
+      dye_any:'./img/dyes/hornet_dye.png',
+      fire_heart:'./img/cores/core_common_fire_heart.png',
+    };
+    const PB_MAT_ICON = {
+      magic_amulet:'📿', rare_amulet:'📿',
+      magic_ring_or_flask:'💍', rare_ring_or_flask:'💍',
+      magic_weapon_or_armor:'⚔️', rare_weapon_or_armor:'⚔️',
+      item_no_socket:'⬡', socketed_item:'⬡', common_item_socket:'⬡',
+    };
+    const PB_MAT_RARITY_COLOR = {
+      magic_amulet:'#4c8fc9', rare_amulet:'#c9a84c',
+      magic_ring_or_flask:'#4c8fc9', rare_ring_or_flask:'#c9a84c',
+      magic_weapon_or_armor:'#4c8fc9', rare_weapon_or_armor:'#c9a84c',
+      fire_heart:'#ff7d44',
+    };
+
+    // Runeword affix data — plain text lines, colorElements applied at render time
+    const PB_RW_DEFAULTS = {
+      'blood of lambs': {
+        lines:['+27% Weapon Damage','+28 Attack','+13% Slashing Penetration',
+               '+12 Magic','+25 Mana','+1% Mana Drain','25% chance to Bleed on hit'],
+        req:'Level 4', flavour:"It's said that in the First Age, magic was a forbidden thing, attainable only through great sacrifice.",
+      },
+      'tender are their eyes': {
+        lines:['Shadow Imbued','+13% Attack Speed','+25% Weapon Damage','+27 Attack',
+               '+35% Shadow Penetration','+2 Feast for Crows','+1 Max Crows in flock'],
+        req:'Level 4', flavour:'A thousand crows circle the battlefield, waiting for their treats.',
+      },
+      'one hard knock to the head': {
+        lines:['+30% Weapon Damage','+32 Attack','+13% Blunt Penetration',
+               '+37% Stun Chance','+20% Stun Duration','+200 Knockback'],
+        req:'Level 4', flavour:"That ringing you hear? Don't worry, it won't bother you for too much longer.",
+      },
+      'skyfather, heed my call': {
+        lines:['Lightning Imbued','+14% Attack Speed','+14 Weapon Damage','+33 Attack',
+               '+34% Lightning Penetration','+31% Shock Chance','+33% Lightning Resistance','+3 Shock Arcs'],
+        req:'Level 5', flavour:'Lend me your might so that my foes flee from your sight!',
+      },
+      'mandate of heaven': {
+        lines:['+11 Attack','+16 Armor','+2 Damage Reduction','+10 Strength','+10% Size'],
+        req:'Level 4', flavour:"Every king claims the Mandate of Heaven, but whether they had it is the realm of historians.",
+      },
+      'one thousand stars': {
+        lines:['+21% Penetrate All Resistances','+14 Magic','+0.5/s Mana Regen',
+               '+1 Stamina','+14% Magic Find','+14% Gold Find'],
+        req:'Level 3', flavour:"Across the night sky stretched a thousand stars, glittering jewels in Rhiannon's belt.",
+      },
+    };
+
+    // IDB helpers (use the shared idbGetAll/idbPutAll defined at top)
+    async function pbDbLoad()        { return idbGetAll(PB_STORE); }
+    async function pbDbSave(recipes) { return idbPutAll(PB_STORE, recipes); }
+
+    // Ingredient parser
+    function pbGuessMatKey(text) {
+      const t=(text||'').toLowerCase();
+      if(/ash[\s-]*rune/.test(t)) return 'ash_rune';
+      if(/bat[\s-]*rune/.test(t)) return 'bat_rune';
+      if(/elm[\s-]*rune/.test(t)) return 'elm_rune';
+      if(/ka[\s-]*rune/ .test(t)) return 'ka_rune';
+      if(/deb[\s-]*rune/.test(t)) return 'deb_rune';
+      if(/rune/.test(t))          return 'rune_any';
+      if(/cracked.*ruby|ruby.*cracked/.test(t)) return 'cracked_ruby';
+      if(/cracked.*gem/.test(t))  return /same/.test(t)?'cracked_gem_same':'cracked_gem_any';
+      if(/flawed.*gem/ .test(t))  return /same/.test(t)?'flawed_gem_same' :'flawed_gem_any';
+      if(/dull.*gem/   .test(t))  return 'dull_gem_any';
+      if(/dye/.test(t))           return 'dye_any';
+      if(/fire.*heart|heart.*fire/.test(t)) return 'fire_heart';
+      if(/magic.*amulet/.test(t)) return 'magic_amulet';
+      if(/magic.*(ring|flask)/.test(t)) return 'magic_ring_or_flask';
+      if(/magic.*(weapon|armor)/.test(t)) return 'magic_weapon_or_armor';
+      if(/rare.*amulet/.test(t))  return 'rare_amulet';
+      if(/rare.*(ring|flask)/.test(t)) return 'rare_ring_or_flask';
+      if(/rare.*(weapon|armor)/.test(t)) return 'rare_weapon_or_armor';
+      if(/no socket|without socket/.test(t)) return 'item_no_socket';
+      if(/common.*socket/.test(t)) return 'common_item_socket';
+      if(/socketed/.test(t))      return 'socketed_item';
+      return null;
+    }
+    function pbParseIngredient(text) {
+      const m=text.trim().match(/^(\d+)\s*[x×]\s*(.+)$/i);
+      const display=m?m[2].trim():text.trim(), qty=m?parseInt(m[1],10):1;
+      const key=pbGuessMatKey(display);
+      const unc=!key||['item_no_socket','socketed_item','common_item_socket',
+        'magic_amulet','rare_amulet','magic_ring_or_flask','rare_ring_or_flask',
+        'magic_weapon_or_armor','rare_weapon_or_armor'].includes(key);
+      return {qty,display,key,uncountable:unc};
+    }
+
+    function pbBuildDefaults() {
+      const R = [
+        {id:'pb_reroll_dye',name:'Reroll Dye',category:'Dye Recipes',
+         ingredients:[{qty:2,key:'dye_any',display:'Dye (any type)',uncountable:false}],
+         output:'1× Dye (random type)',notes:'',isDefault:true},
+        {id:'pb_gem_cracked_flawed',name:'Upgrade Gem — Cracked → Flawed',category:'Gem Recipes',
+         ingredients:[{qty:3,key:'cracked_gem_same',display:'Cracked Gem (same type)',uncountable:false}],
+         output:'1× Flawed Gem',notes:'All 3 must be same gem type',isDefault:true},
+        {id:'pb_gem_flawed_dull',name:'Upgrade Gem — Flawed → Dull',category:'Gem Recipes',
+         ingredients:[{qty:3,key:'flawed_gem_same',display:'Flawed Gem (same type)',uncountable:false}],
+         output:'1× Dull Gem',notes:'All 3 must be same gem type',isDefault:true},
+        {id:'pb_fire_imbue',name:'Fire Imbue',category:'Imbue Recipes',
+         ingredients:[
+           {qty:1,key:'common_item_socket',display:'Common Item (empty socket)',uncountable:true},
+           {qty:1,key:'fire_heart',display:'Fire Heart',uncountable:false},
+           {qty:1,key:'cracked_ruby',display:'Cracked Ruby',uncountable:false},
+         ],
+         output:'1× Fire-Imbued Item',notes:'Sources: Bogie Feral · Skeleton Mage [Fire] · Ember Ghoul',isDefault:true},
+        {id:'pb_magic_amulet',name:'Reroll Magic Amulet',category:'Magic Rerolls',
+         ingredients:[{qty:1,key:'magic_amulet',display:'Magic Amulet',uncountable:true},{qty:2,key:'dull_gem_any',display:'Dull Gem (any type)',uncountable:false}],
+         output:'1× Magic Amulet (rerolled)',notes:'',isDefault:true},
+        {id:'pb_magic_ring_flask',name:'Reroll Magic Ring or Flask',category:'Magic Rerolls',
+         ingredients:[{qty:1,key:'magic_ring_or_flask',display:'Magic Ring or Flask',uncountable:true},{qty:2,key:'flawed_gem_any',display:'Flawed Gem (any type)',uncountable:false}],
+         output:'1× Magic Ring or Flask (rerolled)',notes:'',isDefault:true},
+        {id:'pb_magic_weapon_armor',name:'Reroll Magic Weapon or Armor',category:'Magic Rerolls',
+         ingredients:[{qty:1,key:'magic_weapon_or_armor',display:'Magic Weapon or Armor',uncountable:true},{qty:3,key:'cracked_gem_any',display:'Cracked Gem (any type)',uncountable:false}],
+         output:'1× Magic Weapon or Armor (rerolled)',notes:'',isDefault:true},
+        {id:'pb_rare_amulet',name:'Reroll Rare Amulet',category:'Rare Rerolls',
+         ingredients:[{qty:1,key:'rare_amulet',display:'Rare Amulet',uncountable:true},{qty:1,key:'bat_rune',display:'Bat Rune',uncountable:false},{qty:1,key:'dull_gem_any',display:'Dull Gem (any type)',uncountable:false}],
+         output:'1× Rare Amulet (rerolled)',notes:'',isDefault:true},
+        {id:'pb_rare_ring_flask',name:'Reroll Rare Ring or Flask',category:'Rare Rerolls',
+         ingredients:[{qty:1,key:'rare_ring_or_flask',display:'Rare Ring or Flask',uncountable:true},{qty:1,key:'bat_rune',display:'Bat Rune',uncountable:false},{qty:1,key:'flawed_gem_any',display:'Flawed Gem (any type)',uncountable:false}],
+         output:'1× Rare Ring or Flask (rerolled)',notes:'',isDefault:true},
+        {id:'pb_rare_weapon_armor',name:'Reroll Rare Weapon or Armor',category:'Rare Rerolls',
+         ingredients:[{qty:1,key:'rare_weapon_or_armor',display:'Rare Weapon or Armor',uncountable:true},{qty:1,key:'bat_rune',display:'Bat Rune',uncountable:false},{qty:2,key:'cracked_gem_any',display:'Cracked Gem (any type)',uncountable:false}],
+         output:'1× Rare Weapon or Armor (rerolled)',notes:'',isDefault:true},
+        {id:'pb_upgrade_rune',name:'Upgrade Rune',category:'Rune Recipes',
+         ingredients:[{qty:1,key:'rune_any',display:'Rune (any)',uncountable:false},{qty:2,key:'flawed_gem_any',display:'Flawed Gem (any type)',uncountable:false}],
+         output:'1× Next-Tier Rune',notes:'Ash is highest — cannot be upgraded further.',isDefault:true},
+        {id:'pb_downgrade_rune',name:'Downgrade Rune',category:'Rune Recipes',
+         ingredients:[{qty:1,key:'rune_any',display:'Rune (any)',uncountable:false},{qty:2,key:'cracked_gem_any',display:'Cracked Gem (any type)',uncountable:false}],
+         output:'1× Previous-Tier Rune + 2× Cracked Gem',notes:'',isDefault:true},
+        {id:'pb_add_socket',name:'Add Socket',category:'Socket Recipes',
+         ingredients:[{qty:1,key:'item_no_socket',display:'Item (no sockets)',uncountable:true},{qty:1,key:'elm_rune',display:'Elm Rune',uncountable:false}],
+         output:'Item + 1 socket added',notes:'',isDefault:true},
+        {id:'pb_destructive_unsocket',name:'Destructive Unsocket',category:'Socket Recipes',
+         ingredients:[{qty:1,key:'socketed_item',display:'Socketed Item',uncountable:true},{qty:1,key:'cracked_gem_any',display:'Cracked Gem (any type)',uncountable:false}],
+         output:'All socketables returned. Item destroyed.',notes:'',isDefault:true},
+        {id:'pb_preservative_unsocket',name:'Preservative Unsocket',category:'Socket Recipes',
+         ingredients:[{qty:1,key:'socketed_item',display:'Socketed Item',uncountable:true},{qty:1,key:'ash_rune',display:'Ash Rune',uncountable:false}],
+         output:'Item (empty sockets) + all socketables returned.',notes:'Ash Rune consumed.',isDefault:true},
+      ];
+      if (typeof RUNE_RECIPES !== 'undefined' && Array.isArray(RUNE_RECIPES.runewords)) {
+        const RK={ash:'ash_rune',bat:'bat_rune',ka:'ka_rune',deb:'deb_rune',elm:'elm_rune'};
+        for (const rw of RUNE_RECIPES.runewords) {
+          const ingredients=[{qty:1,key:null,uncountable:true,display:rw.sockets+'-socket '+rw.slot_type.charAt(0).toUpperCase()+rw.slot_type.slice(1)}];
+          const seen={},order=[];
+          for(const r of rw.runes){if(!seen[r]){seen[r]=0;order.push(r);}seen[r]++;}
+          for(const r of order) ingredients.push({qty:seen[r],key:RK[r]||r+'_rune',uncountable:false,display:r.charAt(0).toUpperCase()+r.slice(1)+' Rune'});
+          const defKey=(rw.name||'').toLowerCase().trim();
+          const def=PB_RW_DEFAULTS[defKey]||{lines:[],req:'',flavour:''};
+          R.push({id:'pb_rw_'+rw.name.toLowerCase().replace(/[^a-z0-9]+/g,'_'),name:rw.name,category:'Runewords',ingredients,
+            output:'Runeword active in item',notes:'',
+            _runeOrder:rw.runes.map(r=>r.charAt(0).toUpperCase()+r.slice(1)).join(' → '),
+            _slotType:rw.slot_type,_sockets:rw.sockets,
+            affixLines:def.lines.slice(),req:def.req,flavour:def.flavour,isDefault:true});
+        }
+      }
+      return R;
+    }
+
+    // ── Material counting ─────────────────────────────────────────────────
+    const _PB_WA = new Set(['hand_right','twohand','chest','head','hands','feet','waist','hand_left','mainhand','offhand','belt','gloves','boots']);
+    const _PB_GEM_TYPES = ['amber','lapis','jade','ruby','opal','onyx'];
+    function pbCountMats(data) {
+      const c={}, add=(k,n)=>{c[k]=(c[k]||0)+n;};
+      for(const item of [...(data.stash||[]),...(data.inventory||[])]) {
+        const qty=item.quantity||1;
+        if(item.gemType&&item.gemLevel!=null){const pfx={1:'cracked',2:'flawed',3:'dull'}[item.gemLevel];if(pfx){add(pfx+'_gem_any',qty);add(pfx+'_gem_'+item.gemType,qty);if(pfx==='cracked'&&item.gemType==='ruby')add('cracked_ruby',qty);}}
+        if(item.runeNum){const rn={'1':'ash','2':'bat','3':'ka','4':'deb','5':'elm'}[item.runeNum];if(rn){add(rn+'_rune',qty);add('rune_any',qty);}}
+        if(item.dyeName||item.dyeColor) add('dye_any',qty);
+        if(item.heartName&&item.heartElement==='fire') add('fire_heart',1);
+        if(item.rarity==='Magic'&&item.slot){const s=item.slot;if(s==='neck')add('magic_amulet',1);if(['finger_1','finger_2','ring'].includes(s)||s==='flask')add('magic_ring_or_flask',1);if(_PB_WA.has(s))add('magic_weapon_or_armor',1);}
+        if(item.rarity==='Rare'&&item.slot){const s=item.slot;if(s==='neck')add('rare_amulet',1);if(['finger_1','finger_2','ring'].includes(s)||s==='flask')add('rare_ring_or_flask',1);if(_PB_WA.has(s))add('rare_weapon_or_armor',1);}
+      }
+      for(const pfx of ['cracked','flawed','dull']){let mx=0;for(const t of _PB_GEM_TYPES)mx=Math.max(mx,c[pfx+'_gem_'+t]||0);c[pfx+'_gem_same']=mx;}
+      return c;
+    }
+    function pbCalcCraftCount(recipe,mats){
+      let min=Infinity,any=false;
+      for(const ing of recipe.ingredients){if(ing.uncountable||!ing.key)continue;any=true;min=Math.min(min,Math.floor((mats[ing.key]||0)/ing.qty));}
+      return any?(min===Infinity?0:min):null;
+    }
+
+    // ── Tooltip helpers (use shared showStatTip/moveStatTip/hideStatTip) ──
+    function pbAddTip(el,makeHtml){
+      el.addEventListener('mouseenter',e=>showStatTip(makeHtml(),e.clientX,e.clientY));
+      el.addEventListener('mousemove', e=>moveStatTip(e.clientX,e.clientY));
+      el.addEventListener('mouseleave',()=>hideStatTip());
+    }
+
+    // Apply element colouring (strips embedded parens first to avoid duplication)
+    function pbColor(text){
+      const s=text.replace(/\s*\([^)]+\)\s*/g,' ').replace(/\s+/g,' ').trim();
+      return colorElements(esc(s));
+    }
+
+    // Runeword affix tooltip
+    function pbBuildRunewordTip(recipe){
+      let h='<div class="tip-name tip-name--runeword">'+esc(recipe.name)+'</div>';
+      h+='<div class="tip-subtitle tip-subtitle--runeword">Runeword · '+esc(recipe._slotType||'')+' · '+(recipe._sockets||'?')+' sockets</div>';
+      if(recipe._runeOrder) h+='<div class="dh-pb-tip-order">Order: <span class="dh-pb-tip-order-val">'+esc(recipe._runeOrder)+'</span></div>';
+      h+='<div class="tip-divider tip-divider--runeword"></div>';
+      const lines=recipe.affixLines||[];
+      if(!lines.length){h+='<div class="dh-pb-tip-empty">Click to add affixes.</div>';return h;}
+      for(const line of lines){
+        const m=line.match(/^([+\-]?[\d.]+[%/s]?)\s+(.+)$/);
+        if(m) h+='<div class="tip-affix-row"><span class="tip-bullet tip-bullet--regular"></span><span class="tip-affix-line"><span class="tip-affix-val tip-affix-val--gold">'+esc(m[1])+'</span><span class="tip-affix-name"> '+pbColor(m[2])+'</span></span></div>';
+        else  h+='<div class="tip-affix-row"><span class="tip-bullet tip-bullet--regular"></span><span class="tip-affix-line">'+pbColor(line)+'</span></div>';
+      }
+      if(recipe.req) h+='<div class="tip-req-block"><div class="tip-req-label">Requires:</div><div class="tip-req-row"><span class="tip-req-text">'+esc(recipe.req)+'</span></div></div>';
+      if(recipe.flavour) h+='<div class="tip-divider tip-divider--faint"></div><div class="tip-flavour">'+esc(recipe.flavour)+'</div>';
+      return h;
+    }
+
+    // Craft badge tooltip — includes notes
+    function pbBuildCraftTip(recipe,mats){
+      let h='<div class="scan-tip-title">Craft Availability</div><div class="scan-tip-body">';
+      for(const ing of recipe.ingredients){
+        if(ing.uncountable||!ing.key){h+='<div class="dh-pb-ing-tip-manual">'+esc(ing.qty+'× '+ing.display)+' <em>(manual)</em></div>';continue;}
+        const have=mats[ing.key]||0,col=have>=ing.qty?'#4ade80':'#f87171';
+        h+='<div class="dh-pb-ing-tip-count" style="--dh-ing-color:'+col+';">'+esc(ing.qty+'× '+ing.display)+': <strong>'+have+'</strong> (need '+ing.qty+')</div>';
+      }
+      const count=pbCalcCraftCount(recipe,mats);
+      if(count!==null){
+        const col=count>0?'#4ade80':'#f87171';
+        h+='<div class="dh-pb-tip-summary" style="--dh-pb-summary-color:'+col+';">'+(count>0?'✓ Can craft '+count+'×':'✗ Missing materials')+'</div>';
+      }
+      if(recipe.notes) h+='<div class="dh-pb-tip-notes">'+esc(recipe.notes)+'</div>';
+      return h+'</div>';
+    }
+
+    // Ingredient chip
+    function pbBuildIngChip(ing,mats){
+      const key=ing.key||pbGuessMatKey(ing.display),imgSrc=key?PB_MAT_IMG[key]:null,icon=key?PB_MAT_ICON[key]:null,tint=key?PB_MAT_RARITY_COLOR[key]||null:null;
+      const have=(mats&&key&&!ing.uncountable)?(mats[key]||0):null;
+      const wrap=document.createElement('span');
+      wrap.className='dh-pb-ing-chip';
+      if(ing.qty>1){const q=document.createElement('span');q.className='dh-pb-ing-chip-qty';q.textContent=ing.qty+'×';wrap.appendChild(q);}
+      if(imgSrc){const img=document.createElement('img');img.src=imgSrc;img.alt=ing.display;img.className='dh-pb-ing-chip-img';img.onerror=()=>{img.style.display='none';};wrap.appendChild(img);}
+      else if(icon){const ic=document.createElement('span');ic.className='dh-pb-ing-chip-icon';if(tint)ic.style.color=tint;ic.textContent=icon;wrap.appendChild(ic);}
+      const lbl=document.createElement('span');lbl.textContent=ing.display;lbl.style.color=tint&&!imgSrc?tint:'#bbb';wrap.appendChild(lbl);
+      if(have!==null){const col=have>=ing.qty?'#4ade80':'#f87171';pbAddTip(wrap,()=>'<div class="scan-tip-title">'+esc(ing.display)+'</div><div class="scan-tip-body scan-tip-dyn" style="--scan-tip-color:'+col+';">Have: <strong>'+have+'</strong> · Need: '+ing.qty+'</div>');}
+      else pbAddTip(wrap,()=>'<div class="scan-tip-title">'+esc(ing.display)+'</div><div class="scan-tip-body scan-tip-manual">Provide manually</div>');
+      return wrap;
+    }
+
+    // Ingredient editor popup
+    function pbOpenIngEditor(rowEl,recipe,onSave){
+      document.querySelectorAll('.dh-pb-ing-editor').forEach(e=>e.remove());
+      const ed=document.createElement('div');ed.className='dh-pb-ing-editor';
+      const lbl=document.createElement('label');lbl.className='dh-pb-editor-label';lbl.textContent='Ingredients (one per line)';ed.appendChild(lbl);
+      const ta=document.createElement('textarea');ta.className='dh-pb-editor-textarea';
+      ta.value=recipe.ingredients.map(i=>i.qty+'× '+i.display).join('\n');
+      ed.appendChild(ta);
+      const hint=document.createElement('div');hint.className='dh-pb-editor-hint';hint.textContent='Format: 2× Cracked Gem (any type)';ed.appendChild(hint);
+      const btns=document.createElement('div');btns.className='dh-pb-editor-btns';
+      const sav=document.createElement('button');sav.textContent='✓ Save';sav.className='dh-pb-btn dh-pb-btn--primary';
+      sav.addEventListener('click',()=>{recipe.ingredients=ta.value.split('\n').map(l=>l.trim()).filter(Boolean).map(pbParseIngredient);ed.remove();onSave();});
+      const can=document.createElement('button');can.textContent='Cancel';can.className='dh-pb-btn dh-pb-btn--ghost';
+      can.addEventListener('click',()=>ed.remove());
+      btns.appendChild(sav);btns.appendChild(can);ed.appendChild(btns);
+      rowEl.style.position='relative';rowEl.appendChild(ed);ta.focus();ta.select();
+      const away=e=>{if(!ed.contains(e.target)){ed.remove();document.removeEventListener('mousedown',away,true);}};
+      setTimeout(()=>document.addEventListener('mousedown',away,true),80);
+    }
+
+    // Inline editable span
+    function pbMakeEditable(el,getVal,setVal){
+      el.contentEditable='false';el.style.cursor='text';
+      el.addEventListener('click',()=>{el.contentEditable='true';el.focus();try{const r=document.createRange();r.selectNodeContents(el);const s=window.getSelection();s.removeAllRanges();s.addRange(r);}catch(_){}});
+      el.addEventListener('blur',()=>{el.contentEditable='false';const v=el.textContent.trim();if(v)setVal(v);else el.textContent=getVal();});
+      el.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();el.blur();}if(e.key==='Escape'){el.textContent=getVal();el.blur();}});
+    }
+
+    // Runeword inline affix editor
+    function pbBuildRWEditor(recipe,expandEl,onChange){
+      expandEl.innerHTML='';
+      expandEl.className='dh-pb-rw-editor';
+      const hdrRow=document.createElement('div');hdrRow.className='dh-pb-rw-editor-hdr';
+      const hdrLbl=document.createElement('span');hdrLbl.className='dh-pb-rw-editor-title';hdrLbl.textContent='Affix Editor';hdrRow.appendChild(hdrLbl);
+      const rstBtn=document.createElement('button');rstBtn.innerHTML='↺ Reset to Default';
+      rstBtn.className='dh-pb-btn dh-pb-btn--danger dh-pb-btn--xs';
+      pbAddTip(rstBtn,()=>'<div class="scan-tip-body scan-tip-danger">Reset affixes for this runeword to game defaults.</div>');
+      rstBtn.addEventListener('click',()=>{
+        const def=PB_RW_DEFAULTS[(recipe.name||'').toLowerCase().trim()]||{lines:[],req:'',flavour:''};
+        recipe.affixLines=def.lines.slice();recipe.req=def.req||'';recipe.flavour=def.flavour||'';
+        pbBuildRWEditor(recipe,expandEl,onChange);onChange();
+      });
+      hdrRow.appendChild(rstBtn);expandEl.appendChild(hdrRow);
+      const affLbl=document.createElement('div');affLbl.className='dh-pb-rw-editor-label';affLbl.textContent='Affixes';expandEl.appendChild(affLbl);
+      const list=document.createElement('div');list.className='dh-pb-rw-list';expandEl.appendChild(list);
+      function rebuildAffixList(){
+        list.innerHTML='';if(!recipe.affixLines)recipe.affixLines=[];
+        recipe.affixLines.forEach((line,idx)=>{
+          const row=document.createElement('div');row.className='dh-pb-rw-row';
+          const inp=document.createElement('input');inp.type='text';inp.value=line;
+          inp.className='dh-pb-input dh-pb-input--affix';
+          inp.addEventListener('blur',()=>{recipe.affixLines[idx]=inp.value;onChange();});
+          inp.addEventListener('keydown',e=>{if(e.key==='Enter')inp.blur();});row.appendChild(inp);
+          const del=document.createElement('button');del.innerHTML='&#x2715;';
+          del.className='dh-pb-icon-btn dh-pb-icon-btn--delete';
+          del.addEventListener('click',()=>{recipe.affixLines.splice(idx,1);rebuildAffixList();onChange();});
+          row.appendChild(del);list.appendChild(row);
+        });
+        const addRow=document.createElement('button');addRow.textContent='+ Add affix line';
+        addRow.className='dh-pb-add-row';
+        addRow.addEventListener('click',()=>{recipe.affixLines.push('');rebuildAffixList();onChange();const inputs=list.querySelectorAll('input[type=text]');if(inputs.length)inputs[inputs.length-1].focus();});
+        list.appendChild(addRow);
+      }
+      rebuildAffixList();
+      function metaRow(lText,value,onBlur,ml){
+        const wrap=document.createElement('div');wrap.className='dh-pb-meta-row';
+        const lbl=document.createElement('span');lbl.className='dh-pb-meta-label';lbl.textContent=lText;wrap.appendChild(lbl);
+        const el=document.createElement(ml?'textarea':'input');if(!ml)el.type='text';el.value=value;
+        el.className='dh-pb-input dh-pb-input--meta' + (ml ? ' dh-pb-input--textarea-sm' : '');
+        el.addEventListener('blur',()=>{onBlur(el.value);});
+        if(!ml)el.addEventListener('keydown',e=>{if(e.key==='Enter')el.blur();});
+        wrap.appendChild(el);return wrap;
+      }
+      expandEl.appendChild(metaRow('Requires',recipe.req||'',v=>{recipe.req=v;onChange();},false));
+      expandEl.appendChild(metaRow('Flavour',recipe.flavour||'',v=>{recipe.flavour=v;onChange();},true));
+    }
+
+    // Delete button factory (U+2715, stable hover)
+    function pbMakeDelBtn(onClick){
+      const btn=document.createElement('button');btn.innerHTML='&#x2715;';
+      btn.className='dh-pb-icon-btn dh-pb-icon-btn--clear';
+      btn.addEventListener('click',onClick);return btn;
+    }
+
+    // Recipe row renderer
+    function pbRenderRecipeRow(recipe,mats,onChange,onDelete){
+      const isRW=recipe.category==='Runewords';
+      const expandLsKey=isRW?'dh_pb_rw_expanded_'+recipe.id:null;
+      let expanded=isRW?localStorage.getItem(expandLsKey)==='1':false; // default collapsed
+
+      const wrapper=document.createElement('div');wrapper.className='dh-pb-recipe-wrap';
+      const row=document.createElement('div');
+      row.className='dh-pb-recipe-row';
+
+      // Name — wide enough for longest name
+      const nameEl=document.createElement('span');
+      nameEl.className='dh-pb-recipe-name';
+      nameEl.textContent=recipe.name;
+      pbMakeEditable(nameEl,()=>recipe.name,v=>{recipe.name=v;if(expandEl)pbBuildRWEditor(recipe,expandEl,onChange);onChange();});
+      pbAddTip(nameEl,()=>'<div class="scan-tip-body scan-tip-muted">Click to edit name</div>');
+      row.appendChild(nameEl);
+
+      // Ingredients
+      const ingWrap=document.createElement('div');ingWrap.className='dh-pb-ing-wrap';
+      function rebuildIng(){
+        ingWrap.innerHTML='';
+        for(let i=0;i<recipe.ingredients.length;i++){
+          if(i>0){const sep=document.createElement('span');sep.textContent='+';sep.className='dh-pb-ing-sep';ingWrap.appendChild(sep);}
+          ingWrap.appendChild(pbBuildIngChip(recipe.ingredients[i],mats));
+        }
+        const editBtn=document.createElement('button');editBtn.innerHTML='&#x270E;';
+        editBtn.className='dh-pb-ing-edit-btn';
+        pbAddTip(editBtn,()=>'<div class="scan-tip-body scan-tip-muted">Edit ingredient list</div>');
+        editBtn.addEventListener('click',e=>{e.stopPropagation();hideStatTip();pbOpenIngEditor(row,recipe,()=>{rebuildIng();rebuildBadge();onChange();});});
+        ingWrap.appendChild(editBtn);
+      }
+      rebuildIng();row.appendChild(ingWrap);
+
+      // Arrow
+      const arrow=document.createElement('span');arrow.textContent='→';arrow.className='dh-pb-recipe-arrow';row.appendChild(arrow);
+
+      // Output
+      const outEl=document.createElement('span');
+      outEl.className='dh-pb-output' + (isRW ? ' is-runeword' : ' is-editable');
+      outEl.textContent=recipe.output;
+
+      let expandEl=null;
+      if(isRW){
+        const arrSp=document.createElement('span');arrSp.className='dh-pb-output-arrow';arrSp.textContent='▾';outEl.appendChild(arrSp);
+        expandEl=document.createElement('div');pbBuildRWEditor(recipe,expandEl,onChange);
+        // Apply persisted expand state
+        wrapper.classList.toggle('is-expanded', expanded);
+        outEl.addEventListener('mouseenter',e=>{showStatTip(pbBuildRunewordTip(recipe),e.clientX,e.clientY);});
+        outEl.addEventListener('mousemove',e=>moveStatTip(e.clientX,e.clientY));
+        outEl.addEventListener('mouseleave',()=>{hideStatTip();});
+        outEl.addEventListener('click',()=>{
+          expanded=!expanded;
+          localStorage.setItem(expandLsKey,expanded?'1':'0');
+          wrapper.classList.toggle('is-expanded', expanded);
+          hideStatTip();
+        });
+      } else {
+        pbMakeEditable(outEl,()=>recipe.output,v=>{recipe.output=v;outEl.textContent=v;onChange();});
+        pbAddTip(outEl,()=>'<div class="dh-pb-tip-edit">' +
+          '<span class="dh-pb-tip-edit-value">'+esc(recipe.output)+'</span>' +
+          '<span class="dh-pb-tip-edit-hint">(Click to edit)</span>' +
+          '</div>');
+      }
+      row.appendChild(outEl);
+
+      // Craft badge (notes shown inside tooltip only — not inline on row)
+      let badgeEl;
+      function rebuildBadge(){
+        if(badgeEl)badgeEl.remove();
+        badgeEl=document.createElement('span');
+        const count=pbCalcCraftCount(recipe,mats);
+        const[bg,fg,brd]=count===null?['rgba(255,255,255,.04)','rgba(255,255,255,.22)','rgba(255,255,255,.08)']:count===0?['rgba(239,68,68,.08)','#f87171','rgba(239,68,68,.2)']:['rgba(34,197,94,.12)','#4ade80','rgba(34,197,94,.28)'];
+        badgeEl.className='dh-pb-craft-badge';badgeEl.style.background=bg;badgeEl.style.color=fg;badgeEl.style.borderColor=brd;
+        badgeEl.textContent=count===null?'?×':count+'×';
+        pbAddTip(badgeEl,()=>pbBuildCraftTip(recipe,mats));
+        row.insertBefore(badgeEl,delBtn);
+      }
+      const delBtn=pbMakeDelBtn(()=>{
+        if(recipe.isDefault&&!confirm('Delete default recipe "'+recipe.name+'"?\nRestore with Reset.'))return;
+        onDelete(recipe);
+      });
+      pbAddTip(delBtn,()=>'<div class="scan-tip-body scan-tip-danger">Delete this recipe</div>');
+      row.appendChild(delBtn);rebuildBadge();
+      wrapper.appendChild(row);if(expandEl)wrapper.appendChild(expandEl);
+      return wrapper;
+    }
+
+    // Panel body builder
+    function pbBuildBody(bodyEl,recipes,mats,countEl,onRecipesChange){
+      bodyEl.innerHTML='';
+      countEl.textContent=' · '+recipes.length+' recipe'+(recipes.length!==1?'s':'');
+      const toolbar=document.createElement('div');toolbar.className='dh-pb-toolbar';
+      function mkBtn(html,variant){
+        const b=document.createElement('button');b.innerHTML=html;
+        b.className='dh-pb-toolbar-btn';
+        if(variant) b.classList.add('dh-pb-toolbar-btn--' + variant);
+        return b;
+      }
+      const addBtn=mkBtn('＋ Add Recipe','primary');
+      pbAddTip(addBtn,()=>'<div class="scan-tip-body scan-tip-accent">Add a custom recipe</div>');
+      addBtn.addEventListener('click',()=>{recipes.push({id:'pb_custom_'+Date.now(),name:'New Recipe',category:'Custom',ingredients:[{qty:1,key:null,display:'Item',uncountable:true}],output:'Output',notes:'',isDefault:false});onRecipesChange(recipes);});
+      const importBtn=mkBtn('↑ Import JSON','ghost');
+      pbAddTip(importBtn,()=>'<div class="scan-tip-body scan-tip-subtle">Import from JSON.<br>Duplicate IDs skipped.</div>');
+      importBtn.addEventListener('click',()=>{const inp=document.createElement('input');inp.type='file';inp.accept='.json';inp.onchange=async()=>{if(!inp.files[0])return;try{const imp=JSON.parse(await inp.files[0].text());if(!Array.isArray(imp))throw new Error('Expected JSON array.');const ex=new Set(recipes.map(r=>r.id));let added=0;for(const r of imp){if(!ex.has(r.id)){recipes.push(r);added++;}}onRecipesChange(recipes);alert('Imported '+added+' recipe(s). Skipped '+(imp.length-added)+' duplicates.');}catch(e){alert('Import failed: '+e.message);}};inp.click();});
+      const exportBtn=mkBtn('↓ Export JSON','ghost');
+      pbAddTip(exportBtn,()=>'<div class="scan-tip-body scan-tip-subtle">Save all recipes as JSON file.</div>');
+      exportBtn.addEventListener('click',()=>{const blob=new Blob([JSON.stringify(recipes,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='puzzlebox_recipes.json';a.click();URL.revokeObjectURL(url);});
+      const resetBtn=mkBtn('⟲ Reset','danger');
+      pbAddTip(resetBtn,()=>'<div class="scan-tip-body scan-tip-danger">Restore all defaults.<br><em>Custom recipes lost.</em></div>');
+      resetBtn.addEventListener('click',()=>{if(confirm('Reset all recipes to defaults?')){const fresh=pbBuildDefaults();recipes.splice(0,recipes.length,...fresh);onRecipesChange(recipes);}});
+      toolbar.appendChild(addBtn);toolbar.appendChild(importBtn);toolbar.appendChild(exportBtn);toolbar.appendChild(resetBtn);bodyEl.appendChild(toolbar);
+
+      const catMap={};for(const r of recipes){const c=r.category||'Uncategorized';if(!catMap[c])catMap[c]=[];catMap[c].push(r);}
+      const sortedCats=Object.keys(catMap).sort((a,b)=>{const ai=PB_CATEGORY_ORDER.indexOf(a),bi=PB_CATEGORY_ORDER.indexOf(b);if(ai>=0&&bi>=0)return ai-bi;if(ai>=0)return-1;if(bi>=0)return 1;return a.localeCompare(b);});
+      for(const cat of sortedCats){
+        const catRecipes=catMap[cat].slice().sort((a,b)=>a.name.localeCompare(b.name));
+        const lsKey='dh_pb_cat_'+cat.toLowerCase().replace(/[^a-z0-9]+/g,'_');
+        let catCollapsed=localStorage.getItem(lsKey)==='1';
+        const sec=document.createElement('div');sec.className='dh-pb-cat-section';
+        const catHdr=document.createElement('div');catHdr.className='dh-pb-cat-hdr';
+        const icon=document.createElement('span');icon.className='dh-pb-cat-icon';icon.textContent=PB_CATEGORY_ICON[cat]||'📦';
+        const name=document.createElement('span');name.className='dh-pb-cat-name';name.textContent=cat;
+        const count=document.createElement('span');count.className='dh-pb-cat-count';count.textContent=catRecipes.length;
+        const tgl=document.createElement('span');tgl.className='dh-pb-cat-toggle';tgl.textContent=catCollapsed?'▸':'▾';
+        catHdr.append(icon,name,count,tgl);sec.appendChild(catHdr);
+        const catBody=document.createElement('div');catBody.className='dh-pb-cat-body';sec.classList.toggle('is-collapsed',catCollapsed);sec.appendChild(catBody);
+        catHdr.addEventListener('click',()=>{catCollapsed=!catCollapsed;localStorage.setItem(lsKey,catCollapsed?'1':'0');sec.classList.toggle('is-collapsed',catCollapsed);tgl.textContent=catCollapsed?'▸':'▾';});
+        for(const recipe of catRecipes){catBody.appendChild(pbRenderRecipeRow(recipe,mats,()=>onRecipesChange(recipes),r=>{const i=recipes.indexOf(r);if(i>=0){recipes.splice(i,1);onRecipesChange(recipes);}}));}
+        bodyEl.appendChild(sec);
+      }
+    }
+
+    // Main panel factory — called directly from renderChar
+    function renderPuzzleBoxPanel(data){
+      const mats=data?pbCountMats(data):{};
+      const panel=document.createElement('div');
+      panel.className='dh-pb-panel';
+      const hdr=document.createElement('div');hdr.className='dh-pb-panel-hdr';
+      const pbImg=document.createElement('img');pbImg.src='./img/murakamis_puzzlebox.png';pbImg.alt="Murakami's Puzzle Box";pbImg.className='dh-pb-panel-icon';pbImg.onerror=()=>pbImg.style.display='none';hdr.appendChild(pbImg);
+      const titleEl=document.createElement('span');titleEl.className='dh-pb-panel-title';titleEl.textContent="Murakami's Puzzle Box";hdr.appendChild(titleEl);
+      const countEl=document.createElement('span');countEl.className='dh-pb-panel-count';hdr.appendChild(countEl);
+      const sp=document.createElement('span');sp.style.flex='1';hdr.appendChild(sp);
+      const toggleBtn=document.createElement('button');toggleBtn.className='dh-panel-toggle';toggleBtn.innerHTML='▾';hdr.appendChild(toggleBtn);
+      panel.appendChild(hdr);
+      const body=document.createElement('div');body.className='dh-pb-panel-body';panel.appendChild(body);
+      const initCollapsed=localStorage.getItem('dh_collapsed_puzzlebox')==='1';
+      if(initCollapsed){body.style.display='none';toggleBtn.classList.add('dh-panel-toggle--collapsed');}
+      hdr.addEventListener('click',()=>{const open=body.style.display==='none';body.style.display=open?'':'none';localStorage.setItem('dh_collapsed_puzzlebox',open?'0':'1');toggleBtn.classList.toggle('dh-panel-toggle--collapsed',!open);});
+      // Load recipes from shared darkhaven-browser DB
+      (async()=>{
+        let recipes;
+        try{
+          recipes=await pbDbLoad();
+          if(!recipes||!recipes.length){
+            // Migrate from old LS key if present
+            const ls=localStorage.getItem('dh_puzzlebox_recipes');
+            if(ls){try{recipes=JSON.parse(ls);localStorage.removeItem('dh_puzzlebox_recipes');}catch(_){recipes=null;}}
+            if(!recipes||!recipes.length) recipes=pbBuildDefaults();
+            await pbDbSave(recipes).catch(()=>{});
+          }
+        }catch(e){console.warn('[puzzle_box] IDB error, using defaults:',e);recipes=pbBuildDefaults();}
+        function onRecipesChange(arr){pbDbSave(arr).catch(()=>{});pbBuildBody(body,arr,mats,countEl,onRecipesChange);}
+        pbBuildBody(body,recipes,mats,countEl,onRecipesChange);
+      })();
+      return panel;
+    }
+  } // end puzzle box block
+
 });

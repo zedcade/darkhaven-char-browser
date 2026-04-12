@@ -90,24 +90,27 @@ const BASE_ITEMS = [
   { name:'Duskshear',            category:'weapons',  slot:'hand_right', rarity:'special',            reqLevel:null, baseSpeed:1.666666667 },
   { name:'Gibbering Stabber',    category:'weapons',  slot:'hand_right', rarity:'special',            reqLevel:null, baseSpeed:1.515 },
   { name:'Knife',                category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null, baseSpeed:1.666666667 },
-  { name:'Poignard',             category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null, baseSpeed:1.666666667 },
+  { name:'Poignard',             category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null, baseSpeed:1.657 },
   { name:'Ripfury Claw',         category:'weapons',  slot:'hand_right', rarity:'special',            reqLevel:null, baseSpeed:1.922 },
   { name:'Ritual Dagger',        category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null, baseSpeed:1.4492 },
-  { name:'Sacrificial Knife',    category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null, baseSpeed:1.45 },
+  { name:'Sacrificial Knife',    category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null, baseSpeed:1.449 },
   { name:'Sword',                category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null, baseSpeed:1.1  },
   { name:'Tyrant',               category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null, baseSpeed:0.9  },
   { name:'Crystal Shard',        category:'weapons',  slot:'hand_right', rarity:'variable',           reqLevel:null, baseSpeed:1.1  },
 
   // ── Weapons — Two-Handed (Staves) ─────────────────────────────────────────
   { name:'Bramble Staff',        category:'weapons',  slot:'twohand',    rarity:'special',            reqLevel:null, baseSpeed:1.03 },
-  { name:'The Golden Bough',     category:'weapons',  slot:'twohand',    rarity:'legendary',            reqLevel:null, baseSpeed:1.159 },
+  { name:'The Golden Bough',     category:'weapons',  slot:'twohand',    rarity:'legendary',            reqLevel:null, baseSpeed:1.146 },
   { name:'Crystal Shard Staff', category:'weapons',  slot:'twohand',    rarity:'variable',           reqLevel:null, baseSpeed:1.11111111111111 },
   { name:'Gnarled Staff',        category:'weapons',  slot:'twohand',    rarity:'variable',           reqLevel:null, baseSpeed:1.11111111111111 },
   { name:'Snagtooth Pike',       category:'weapons',  slot:'twohand',    rarity:'special',            reqLevel:null, baseSpeed:1.25 },
   { name:'Spired Staff',         category:'weapons',  slot:'twohand',    rarity:'variable',           reqLevel:null, baseSpeed:1.1109 },
-  { name:'Thorn Staff',          category:'weapons',  slot:'twohand',    rarity:'special',            reqLevel:null, baseSpeed:1.00 },
+  { name:'Thorn Staff',          category:'weapons',  slot:'twohand',    rarity:'special',            reqLevel:null, baseSpeed:1.031 },
   { name:'Twin Pronged Staff',   category:'weapons',  slot:'twohand',    rarity:'variable',           reqLevel:null, baseSpeed:1.11111111111111 },
-  { name:"Tyrant's Staff",       category:'weapons',  slot:'twohand',    rarity:'special',            reqLevel:null, baseSpeed:1.00 },
+  { name:"Tyrant's Staff",       category:'weapons',  slot:'twohand',    rarity:'special',            reqLevel:null, baseSpeed:0.953 },
+
+  // ── Tools — Two-Handed (Pick Axe) ─────────────────────────────────────────
+  { name:"Pick Axe",       category:'tools',  slot:'twohand',    rarity:'variable',            reqLevel:null, baseSpeed:0.77 },
 
   // ── Gems ──────────────────────────────────────────────────────────────────
   { name:'Cracked Amber',        category:'gems',     slot:'—',          rarity:'Common',             reqLevel:null },
